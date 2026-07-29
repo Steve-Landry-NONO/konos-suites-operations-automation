@@ -1,0 +1,423 @@
+{
+  "name": "KONOS — Cycle de lessive vers mouvements de suivi",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "992a0faf-8fcc-4a84-ad50-94fd1741bacb",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1568,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/d963222e-f8ef-4575-9ff1-c1e3bfd2ced7/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\n  \"page_size\": 100,\n  \"filter\": {\n    \"or\": [\n      {\n        \"property\": \"Statut\",\n        \"select\": {\n          \"equals\": \"Lavage en cours\"\n        }\n      },\n      {\n        \"property\": \"Statut\",\n        \"select\": {\n          \"equals\": \"À sécher\"\n        }\n      },\n      {\n        \"property\": \"Statut\",\n        \"select\": {\n          \"equals\": \"Séchage en cours\"\n        }\n      },\n      {\n        \"property\": \"Statut\",\n        \"select\": {\n          \"equals\": \"À ranger\"\n        }\n      },\n      {\n        \"property\": \"Statut\",\n        \"select\": {\n          \"equals\": \"Terminé\"\n        }\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "44f3c9ad-2eab-495a-a2ae-606a366416f4",
+      "name": "Lire cycles à synchroniser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1360,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const map={\n'Lavage en cours':'Lavage lancé',\n'À sécher':'Lavage terminé',\n'Séchage en cours':'Séchage lancé',\n'À ranger':'Séchage terminé',\n'Terminé':'Rangé propre'\n};\nreturn ($json.results??[]).flatMap(c=>{\n const statut=c.properties?.Statut?.select?.name;\n const type=map[statut];\n const ids=(c.properties?.['Mouvements liés']?.relation??[]).map(x=>x.id);\n if(!type||!ids.length)return [];\n return ids.map(id=>({json:{\n   cycle_page_id:c.id,\n   cycle_status:statut,\n   movement_type:type,\n   source_movement_id:id\n }}));\n});"
+      },
+      "id": "5cee72e1-9969-4537-bfd2-ee89760dcdca",
+      "name": "Préparer étapes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "36f990bb-60b5-4431-8a7d-e17003848911",
+      "name": "Traiter chaque article",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -960,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.notion.com/v1/pages/\" + $json.source_movement_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "49240a47-56e0-4fc5-8b3c-e6e1e82017f5",
+      "name": "Lire mouvement source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -768,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Traiter chaque article').item.json;\nconst p=$json.properties??{};\nconst a=p['Article linge']?.relation?.[0]?.id;\nconst i=p['Intervention liée']?.relation?.[0]?.id;\nconst q=p['Quantité']?.number??0;\nconst aid=['cycle-etape',c.cycle_page_id.replaceAll('-',''),c.movement_type,c.source_movement_id.replaceAll('-','')].join(':');\nreturn [{json:{...c,article_page_id:a,intervention_page_id:i,quantity:q,automation_id:aid,valid:!!a&&!!i&&q>0}}];"
+      },
+      "id": "59036c93-987b-437b-b00d-a0430888ee0f",
+      "name": "Préparer mouvement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"ID automatisation\",\n    rich_text: {\n      equals: $json.automation_id\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "411999b6-e5ee-4f96-980a-f6d8be6da9a9",
+      "name": "Chercher étape existante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -368,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer mouvement').item.json; return [{json:{...c,exists:($json.results??[]).length>0}}];"
+      },
+      "id": "fed25e0f-29da-42d0-b28c-6202faf14f7b",
+      "name": "Décider création",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "create",
+              "leftValue": "={{$json.exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2804307b-dfc2-4367-a958-493ca2241685",
+      "name": "Créer étape ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        48,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"4b7d29cf-082a-4135-8695-6e638e20dd26\"\n  },\n  properties: {\n    \"Mouvement\": {\n      title: [\n        {\n          type: \"text\",\n          text: {\n            content: $json.movement_type + \" — cycle de lessive\"\n          }\n        }\n      ]\n    },\n    \"Date mouvement\": {\n      date: {\n        start: new Date().toISOString().slice(0, 10)\n      }\n    },\n    \"Type mouvement\": {\n      select: {\n        name: $json.movement_type\n      }\n    },\n    \"Quantité\": {\n      number: $json.quantity\n    },\n    \"Article linge\": {\n      relation: [\n        {\n          id: $json.article_page_id\n        }\n      ]\n    },\n    \"Intervention liée\": {\n      relation: [\n        {\n          id: $json.intervention_page_id\n        }\n      ]\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Créé par\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"ID automatisation\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: $json.automation_id\n          }\n        }\n      ]\n    },\n    \"Commentaire\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Étape créée automatiquement depuis le statut du cycle de lessive.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "e52d13e5-1e1d-4b88-8fb9-e3d6a3a845d5",
+      "name": "Créer mouvement d’étape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        -80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "ff892800-f57e-426f-ae14-3740c83201f0",
+      "name": "Étape traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        32
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire cycles à synchroniser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire cycles à synchroniser": {
+      "main": [
+        [
+          {
+            "node": "Préparer étapes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer étapes": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque article": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lire mouvement source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire mouvement source": {
+      "main": [
+        [
+          {
+            "node": "Préparer mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer mouvement": {
+      "main": [
+        [
+          {
+            "node": "Chercher étape existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher étape existante": {
+      "main": [
+        [
+          {
+            "node": "Décider création",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider création": {
+      "main": [
+        [
+          {
+            "node": "Créer étape ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer étape ?": {
+      "main": [
+        [
+          {
+            "node": "Créer mouvement d’étape",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Étape traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer mouvement d’étape": {
+      "main": [
+        [
+          {
+            "node": "Étape traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Étape traitée": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "fbbb5540-6cca-44f2-9379-1106e606fa9d",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "hGJSH3RyYX1yVX2K",
+  "tags": []
+}

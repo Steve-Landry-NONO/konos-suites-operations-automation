@@ -1,0 +1,453 @@
+{
+  "name": "KONOS — Départ confirmé vers retour linge sale",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "144ef8e2-9297-4d36-8acf-5b5dbeaf29cb",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1776,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/a6770a38-9710-4026-bd17-4d0937093c3c/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"page_size\": 100,\n  \"filter\": {\n    \"property\": \"Départ confirmé\",\n    \"checkbox\": {\n      \"equals\": true\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "ca28cca6-bdd1-4087-83fc-c494b32d3d78",
+      "name": "Lire départs confirmés",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1568,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction title(prop) {\n  return prop?.title?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? '';\n}\nfunction dateStart(prop) {\n  return prop?.date?.start ?? new Date().toISOString().slice(0, 10);\n}\n\nconst output = [];\nfor (const page of ($json.results ?? [])) {\n  const interventions = page.properties?.['Interventions']?.relation ?? [];\n  if (!interventions.length) continue;\n\n  output.push({\n    json: {\n      reservation_page_id: page.id,\n      reservation_name: title(page.properties?.['Réservation']) || page.id,\n      departure_date: dateStart(page.properties?.['Départ']),\n      intervention_ids: interventions.map(x => x.id),\n    }\n  });\n}\nreturn output;\n"
+      },
+      "id": "eaf75330-b4be-4ed9-9359-65d3b7c42d5d",
+      "name": "Préparer les départs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "25e376a3-6136-4853-8a0b-65ad3902e4b9",
+      "name": "Traiter chaque départ",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1136,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: {\n    and: [\n      {\n        or: $json.intervention_ids.map(id => ({\n          property: \"Intervention liée\",\n          relation: {\n            contains: id\n          }\n        }))\n      },\n      {\n        property: \"Type mouvement\",\n        select: {\n          equals: \"Installation logement\"\n        }\n      },\n      {\n        property: \"Statut\",\n        select: {\n          equals: \"Confirmé\"\n        }\n      }\n    ]\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "54265808-427a-4a27-9f8e-1a705e2db90f",
+      "name": "Lire linge installé",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -912,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst source = $('Traiter chaque départ').item.json;\nconst output = [];\n\nfor (const page of ($json.results ?? [])) {\n  const p = page.properties ?? {};\n  const articleRelation = p['Article linge']?.relation ?? [];\n  const interventionRelation = p['Intervention liée']?.relation ?? [];\n  const qty = p['Quantité']?.number ?? 0;\n  if (!articleRelation.length || !interventionRelation.length || qty <= 0) continue;\n\n  output.push({\n    json: {\n      reservation_page_id: source.reservation_page_id,\n      reservation_name: source.reservation_name,\n      departure_date: source.departure_date,\n      source_installation_page_id: page.id,\n      article_page_id: articleRelation[0].id,\n      intervention_page_id: interventionRelation[0].id,\n      quantity: qty,\n      automation_id: 'retour-sale:' + page.id.replaceAll('-', ''),\n      movement_title: 'Retour sale — ' + source.reservation_name\n    }\n  });\n}\nreturn output;\n"
+      },
+      "id": "be79a9c5-169b-4a16-8d37-79893461895d",
+      "name": "Préparer retours sales",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7a545d08-f66d-4a8d-8623-dcbe5e814e01",
+      "name": "Traiter chaque article sale",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -464,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"ID automatisation\",\n    rich_text: {\n      equals: $json.automation_id\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "178c69bd-f20b-4845-8d41-f7caa88ebc17",
+      "name": "Chercher retour existant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -256,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst source = $('Traiter chaque article sale').item.json;\nreturn [{\n  json: {\n    ...source,\n    return_exists: ($json.results ?? []).length > 0\n  }\n}];\n"
+      },
+      "id": "25f09daf-d1bb-4753-8a81-730b70608315",
+      "name": "Décider création retour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "not-exists",
+              "leftValue": "={{$json.return_exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "97df63c9-0171-46c0-9773-4f7884e37cbd",
+      "name": "Créer le retour ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"4b7d29cf-082a-4135-8695-6e638e20dd26\"\n  },\n  properties: {\n    \"Mouvement\": {\n      title: [\n        {\n          type: \"text\",\n          text: {\n            content: $json.movement_title\n          }\n        }\n      ]\n    },\n    \"Date mouvement\": {\n      date: {\n        start: $json.departure_date\n      }\n    },\n    \"Type mouvement\": {\n      select: {\n        name: \"Retour sale\"\n      }\n    },\n    \"Quantité\": {\n      number: $json.quantity\n    },\n    \"Article linge\": {\n      relation: [\n        {\n          id: $json.article_page_id\n        }\n      ]\n    },\n    \"Intervention liée\": {\n      relation: [\n        {\n          id: $json.intervention_page_id\n        }\n      ]\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Créé par\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"ID automatisation\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: $json.automation_id\n          }\n        }\n      ]\n    },\n    \"Commentaire\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Retour sale créé automatiquement après confirmation du départ voyageur.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "e3274fe7-7bc0-47eb-89f6-86285a945bdb",
+      "name": "Créer retour sale",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        -80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "52dbe3b6-b02f-4dbf-a75d-ff593382acd7",
+      "name": "Retour traité",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire départs confirmés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire départs confirmés": {
+      "main": [
+        [
+          {
+            "node": "Préparer les départs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les départs": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque départ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque départ": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lire linge installé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire linge installé": {
+      "main": [
+        [
+          {
+            "node": "Préparer retours sales",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer retours sales": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article sale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque article sale": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Chercher retour existant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher retour existant": {
+      "main": [
+        [
+          {
+            "node": "Décider création retour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider création retour": {
+      "main": [
+        [
+          {
+            "node": "Créer le retour ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer le retour ?": {
+      "main": [
+        [
+          {
+            "node": "Créer retour sale",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retour traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer retour sale": {
+      "main": [
+        [
+          {
+            "node": "Retour traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour traité": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article sale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "85db687f-c347-411c-8ed3-bd5b23135208",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "tzU6AYwIl8qyE0hm",
+  "tags": []
+}

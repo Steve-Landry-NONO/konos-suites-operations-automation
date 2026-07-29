@@ -1,0 +1,536 @@
+{
+  "name": "KONOS — Retours sales vers cycle de lessive",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "ba8b3a74-c37d-4ad4-9ca2-fec9de64e4b6",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1856,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/a6770a38-9710-4026-bd17-4d0937093c3c/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"page_size\": 100,\n  \"filter\": {\n    \"and\": [\n      {\n        \"property\": \"Départ confirmé\",\n        \"checkbox\": {\n          \"equals\": true\n        }\n      },\n      {\n        \"property\": \"Retour linge traité\",\n        \"checkbox\": {\n          \"equals\": false\n        }\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "e353b395-b87a-409d-a96d-33f88ebbc618",
+      "name": "Lire départs à traiter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1648,
+        64
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction title(prop) {\n  return prop?.title?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? '';\n}\nfunction dateStart(prop) {\n  return prop?.date?.start ?? new Date().toISOString().slice(0, 10);\n}\nreturn ($json.results ?? []).map(page => ({\n  json: {\n    reservation_page_id: page.id,\n    reservation_name: title(page.properties?.['Réservation']) || page.id,\n    departure_date: dateStart(page.properties?.['Départ']),\n    intervention_ids: (page.properties?.['Interventions']?.relation ?? []).map(x => x.id),\n    cycle_automation_id: 'cycle-lessive:' + page.id.replaceAll('-', '')\n  }\n})).filter(x => x.json.intervention_ids.length > 0);\n"
+      },
+      "id": "0f977ec2-2e7d-4faa-9554-924dfd10f8fe",
+      "name": "Préparer cycles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1424,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "5980a555-7453-44b7-86c6-c59070659d92",
+      "name": "Traiter chaque réservation",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1216,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/d963222e-f8ef-4575-9ff1-c1e3bfd2ced7/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"ID automatisation\",\n    rich_text: {\n      equals: $json.cycle_automation_id\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "28337d81-1c42-4ac1-b385-ae4d2aad7a19",
+      "name": "Chercher cycle existant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -992,
+        64
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst source = $('Traiter chaque réservation').item.json;\nreturn [{\n  json: {\n    ...source,\n    cycle_exists: ($json.results ?? []).length > 0\n  }\n}];\n"
+      },
+      "id": "539ee994-2a13-4038-bac3-71e36c574e2f",
+      "name": "Décider création cycle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "no-cycle",
+              "leftValue": "={{$json.cycle_exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b58dcd93-b1fb-431a-a3e7-5a4b5255cce3",
+      "name": "Créer le cycle ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -544,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: {\n    and: [\n      {\n        or: $json.intervention_ids.map(id => ({\n          property: \"Intervention liée\",\n          relation: {\n            contains: id\n          }\n        }))\n      },\n      {\n        property: \"Type mouvement\",\n        select: {\n          equals: \"Retour sale\"\n        }\n      },\n      {\n        property: \"Statut\",\n        select: {\n          equals: \"Confirmé\"\n        }\n      }\n    ]\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "23e14b3b-6930-4692-bdf8-191e6597fcc9",
+      "name": "Lire retours sales",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -336,
+        -16
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst source = $('Créer le cycle ?').item.json;\nconst pages = $json.results ?? [];\nconst quantity = pages.reduce((sum, p) => sum + (p.properties?.['Quantité']?.number ?? 0), 0);\nreturn [{\n  json: {\n    ...source,\n    movement_ids: pages.map(p => p.id),\n    total_quantity: quantity,\n    has_returns: pages.length > 0\n  }\n}];\n"
+      },
+      "id": "8f762b50-da44-499a-81ef-9968d90c523e",
+      "name": "Préparer création cycle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-returns",
+              "leftValue": "={{$json.has_returns}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "55c515f0-8522-4c79-a78d-9cd7a3227e6e",
+      "name": "Retours sales trouvés ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"d963222e-f8ef-4575-9ff1-c1e3bfd2ced7\"\n  },\n  properties: {\n    \"Cycle lessive\": {\n      title: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Lessive — \" + $json.reservation_name\n          }\n        }\n      ]\n    },\n    \"Date prévue\": {\n      date: {\n        start: $json.departure_date\n      }\n    },\n    \"Statut\": {\n      select: {\n        name: \"À programmer\"\n      }\n    },\n    \"Priorité\": {\n      select: {\n        name: \"Normale\"\n      }\n    },\n    \"Type charge\": {\n      select: {\n        name: \"Mixte autorisé\"\n      }\n    },\n    \"Quantité totale\": {\n      number: $json.total_quantity\n    },\n    \"Source création\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"Interventions liées\": {\n      relation: $json.intervention_ids.map(id => ({\n        id: id\n      }))\n    },\n    \"Mouvements liés\": {\n      relation: $json.movement_ids.map(id => ({\n        id: id\n      }))\n    },\n    \"ID automatisation\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: $json.cycle_automation_id\n          }\n        }\n      ]\n    },\n    \"Linge contrôlé\": {\n      checkbox: false\n    },\n    \"Linge sec\": {\n      checkbox: false\n    },\n    \"Linge plié\": {\n      checkbox: false\n    },\n    \"Linge rangé\": {\n      checkbox: false\n    },\n    \"Notes\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Cycle créé automatiquement après le départ confirmé du voyageur.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "e2ecd6c5-b57c-428e-b783-8a30753fc1f8",
+      "name": "Créer cycle de lessive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        -96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ \"https://api.notion.com/v1/pages/\" + $(\"Traiter chaque réservation\").item.json.reservation_page_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"properties\": {\n    \"Retour linge traité\": {\n      \"checkbox\": true\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "54145b73-4427-40f9-86bd-c10c33a6b6f6",
+      "name": "Marquer retour linge traité",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        -96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "a5c14acd-b7a5-4fcc-87e5-e5125f48bd66",
+      "name": "Cycle traité",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        64
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire départs à traiter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire départs à traiter": {
+      "main": [
+        [
+          {
+            "node": "Préparer cycles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer cycles": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque réservation": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Chercher cycle existant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher cycle existant": {
+      "main": [
+        [
+          {
+            "node": "Décider création cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider création cycle": {
+      "main": [
+        [
+          {
+            "node": "Créer le cycle ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer le cycle ?": {
+      "main": [
+        [
+          {
+            "node": "Lire retours sales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cycle traité",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Marquer retour linge traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire retours sales": {
+      "main": [
+        [
+          {
+            "node": "Préparer création cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer création cycle": {
+      "main": [
+        [
+          {
+            "node": "Retours sales trouvés ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retours sales trouvés ?": {
+      "main": [
+        [
+          {
+            "node": "Créer cycle de lessive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cycle traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer cycle de lessive": {
+      "main": [
+        [
+          {
+            "node": "Marquer retour linge traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer retour linge traité": {
+      "main": [
+        [
+          {
+            "node": "Cycle traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cycle traité": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "45305ce3-abae-4f41-b78b-64f16047b72a",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "dbt5D6eqr1NODhRP",
+  "tags": []
+}
