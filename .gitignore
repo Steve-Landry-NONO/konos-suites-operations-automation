@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+credentials/
+secrets/
+*.key
+*.pem
+*.credentials.json
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
