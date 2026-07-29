@@ -1,0 +1,543 @@
+{
+  "name": "KONOS — Gestion des incidents opérationnels",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "73575d48-06e3-4d6e-a8e5-aab093ed3122",
+      "name": "Déclenchement manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1696,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/71cb042a-8768-4afa-be06-45895e262b0b/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\n  \"page_size\": 100,\n  \"filter\": {\"and\": [\n    {\"property\":\"Incident constaté\",\"checkbox\":{\"equals\":true}},\n    {\"property\":\"Statut\",\"select\":{\"does_not_equal\":\"Annulée\"}}\n  ]}\n}",
+        "options": {}
+      },
+      "id": "63100a0c-16f3-41aa-9b84-df5dd0bd4143",
+      "name": "Lire interventions avec incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1472,
+        -16
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function title(p){return (p?.title??[]).map(x=>x.plain_text??'').join('')}function text(p){return (p?.rich_text??[]).map(x=>x.plain_text??'').join('')}function sel(p){return p?.select?.name??''}function rel(p){return (p?.relation??[]).map(x=>x.id)}return ($json.results??[]).map(i=>{const p=i.properties??{};const typ=sel(p['Type incident'])||'Autre';const id='incident:'+i.id.replaceAll('-','')+':'+typ.toLowerCase();return {json:{intervention_id:i.id,name:title(p.Intervention)||i.id,type:typ,description:text(p['Description incident'])||'Incident signalé sans description',action:text(p['Action corrective'])||'Analyser et définir une action corrective',reservation_ids:rel(p['Réservation liée']),automation_id:id}}});"
+      },
+      "id": "9a82ebe7-154b-4cce-9bc7-dbc68c43ce04",
+      "name": "Préparer incidents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "1c847530-eafe-43bd-8ae2-b2bcfd4303d8",
+      "name": "Traiter chaque incident",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1040,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{...$json,query_body:JSON.stringify({page_size:1,filter:{property:'ID automatisation',rich_text:{equals:$json.automation_id}}})}}];"
+      },
+      "id": "f7c1e552-4c1a-416e-998d-5c98219e6633",
+      "name": "Préparer recherche doublon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/447f7d6b-5b4e-4005-a861-9b91caf4bcda/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.query_body}}",
+        "options": {}
+      },
+      "id": "52df9bf9-0c78-4f51-8201-cc072d403042",
+      "name": "Chercher incident existant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -592,
+        -16
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer recherche doublon').item.json;const e=($json.results??[])[0];return [{json:{...c,exists:!!e,alert_id:e?.id??''}}];"
+      },
+      "id": "ed5d15bc-5dcc-4cec-9229-a6286cc9a9d7",
+      "name": "Décider incident",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "Incident absent ?",
+              "leftValue": "={{!$json.exists}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1cff2fc-8d22-4522-bdaf-17ba8bc3aa43",
+      "name": "Incident absent ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;const today=new Date().toISOString().slice(0,10);const props={'Alerte':{title:[{type:'text',text:{content:`Incident ${x.type} — ${x.name}`}}]},'Type':{select:{name:'Incident'}},'Priorité':{select:{name:['Dégât','Accès'].includes(x.type)?'Critique':'Haute'}},'Statut':{select:{name:'Ouverte'}},'Date détection':{date:{start:today}},'Intervention':{relation:[{id:x.intervention_id}]},'Description':{rich_text:[{type:'text',text:{content:x.description}}]},'Action attendue':{rich_text:[{type:'text',text:{content:x.action}}]},'Destinataire':{rich_text:[{type:'text',text:{content:'Steve'}}]},'ID automatisation':{rich_text:[{type:'text',text:{content:x.automation_id}}]},'Dernière mise à jour':{date:{start:today}}};if(x.reservation_ids.length)props['Réservation']={relation:x.reservation_ids.map(id=>({id}))};return [{json:{...x,request_body:JSON.stringify({parent:{data_source_id:'447f7d6b-5b4e-4005-a861-9b91caf4bcda'},properties:props})}}];"
+      },
+      "id": "1c7d5205-3dc1-4184-af3d-41ec65344916",
+      "name": "Préparer création incident",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "c444214f-c68f-4761-97b2-d500c38b9b4b",
+      "name": "Créer incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        -112
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;const today=new Date().toISOString().slice(0,10);return [{json:{...x,request_body:JSON.stringify({properties:{'Description':{rich_text:[{type:'text',text:{content:x.description}}]},'Action attendue':{rich_text:[{type:'text',text:{content:x.action}}]},'Dernière mise à jour':{date:{start:today}}}})}}];"
+      },
+      "id": "fd198890-592b-47c1-84d7-597155bd2c33",
+      "name": "Préparer mise à jour incident",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.alert_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "1512b675-8b69-4579-b62e-935d518f00c5",
+      "name": "Mettre à jour incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$('Décider incident').item.json;return [{json:{...x,request_body:JSON.stringify({properties:{'Steve prévenu':{checkbox:true},'Date dernière mise à jour':{date:{start:new Date().toISOString().slice(0,10)}}}})}}];"
+      },
+      "id": "b6331558-1110-4ab2-a072-58e75d6e8aa7",
+      "name": "Préparer marquage Steve",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.intervention_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "fa9387c8-5fc1-45c0-9a90-bfa1ea57a6c4",
+      "name": "Marquer Steve prévenu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -16
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "1f934fd8-5cc6-44db-963f-156ead0ae137",
+      "name": "Fin incident",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        -16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclenchement manuel": {
+      "main": [
+        [
+          {
+            "node": "Lire interventions avec incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire interventions avec incident": {
+      "main": [
+        [
+          {
+            "node": "Préparer incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer incidents": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque incident": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Préparer recherche doublon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer recherche doublon": {
+      "main": [
+        [
+          {
+            "node": "Chercher incident existant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher incident existant": {
+      "main": [
+        [
+          {
+            "node": "Décider incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider incident": {
+      "main": [
+        [
+          {
+            "node": "Incident absent ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incident absent ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer création incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer mise à jour incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer création incident": {
+      "main": [
+        [
+          {
+            "node": "Créer incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer incident": {
+      "main": [
+        [
+          {
+            "node": "Préparer marquage Steve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer mise à jour incident": {
+      "main": [
+        [
+          {
+            "node": "Mettre à jour incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre à jour incident": {
+      "main": [
+        [
+          {
+            "node": "Préparer marquage Steve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer marquage Steve": {
+      "main": [
+        [
+          {
+            "node": "Marquer Steve prévenu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer Steve prévenu": {
+      "main": [
+        [
+          {
+            "node": "Fin incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fin incident": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b6c8c75b-6170-4ac2-b4fd-8785289ecf57",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "91ZAFOhqQ7JjdxQX",
+  "tags": []
+}

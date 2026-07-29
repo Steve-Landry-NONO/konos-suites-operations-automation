@@ -1,0 +1,417 @@
+{
+  "name": "KONOS — Rappels et relances intervenante",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "62fe7dcd-5629-4041-a9fd-0aa09d3d740e",
+      "name": "Déclenchement manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const n=new Date();const t=new Date(n.getTime()+24*3600*1000);return [{json:{today:n.toISOString().slice(0,10),tomorrow:t.toISOString().slice(0,10)}}];"
+      },
+      "id": "50f2ce6e-abd5-4f10-a398-5e50806b8039",
+      "name": "Préparer dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/dfb3ee8c-d3a2-4cf3-98d5-f93d7c1c32e6/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({page_size:100,filter:{and:[{property:'Date intervention',date:{on_or_after:$json.today}},{property:'Date intervention',date:{on_or_before:$json.tomorrow}},{property:'Statut',select:{does_not_equal:'Terminée'}},{property:'Statut',select:{does_not_equal:'Annulée'}}]},sorts:[{property:'Date intervention',direction:'ascending'}]}) }}",
+        "options": {}
+      },
+      "id": "786f0cb7-94e1-463e-96f1-1b33474cd10c",
+      "name": "Lire missions à rappeler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        -128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function title(p){return (p?.title??[]).map(x=>x.plain_text??'').join('')}function text(p){return (p?.rich_text??[]).map(x=>x.plain_text??'').join('')}function date(p){return p?.date?.start??''}function sel(p){return p?.select?.name??''}return ($json.results??[]).map(m=>{const p=m.properties??{};const d=date(p['Date intervention']);const id='mission-reminder:'+m.id.replaceAll('-','')+':'+d;return {json:{mission_id:m.id,mission:title(p.Mission)||m.id,date:d,time:text(p['Heure prévue']),status:sel(p.Statut),automation_id:id}}});"
+      },
+      "id": "eae4f19c-b07d-4fb9-a02b-711f36061b7d",
+      "name": "Préparer rappels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "55785b56-d294-4d0a-a1f5-300826058aa2",
+      "name": "Traiter chaque mission",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        752,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{...$json,query_body:JSON.stringify({page_size:1,filter:{property:'ID automatisation',rich_text:{equals:$json.automation_id}}})}}];"
+      },
+      "id": "4b79f034-279f-4636-8446-07678c186a30",
+      "name": "Préparer recherche doublon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/447f7d6b-5b4e-4005-a861-9b91caf4bcda/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.query_body}}",
+        "options": {}
+      },
+      "id": "ddd885d4-9050-4a19-bac9-825e9d0ff8a5",
+      "name": "Chercher rappel existant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        -128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer recherche doublon').item.json;return [{json:{...c,exists:($json.results??[]).length>0}}];"
+      },
+      "id": "174cd21e-ab01-41c2-ac15-13a24ab33491",
+      "name": "Décider rappel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "Rappel absent ?",
+              "leftValue": "={{!$json.exists}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1e8814e8-9b24-4508-b504-78b9b7cf7fec",
+      "name": "Rappel absent ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1632,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;const today=new Date().toISOString().slice(0,10);const body={parent:{data_source_id:'447f7d6b-5b4e-4005-a861-9b91caf4bcda'},properties:{'Alerte':{title:[{type:'text',text:{content:`Rappel mission — ${x.mission}`}}]},'Type':{select:{name:'Rappel intervenante'}},'Priorité':{select:{name:x.date===today?'Haute':'Normale'}},'Statut':{select:{name:'À traiter'}},'Date détection':{date:{start:today}},'Date échéance':{date:{start:x.date}},'Mission':{relation:[{id:x.mission_id}]},'Description':{rich_text:[{type:'text',text:{content:`Mission ${x.status}, prévue le ${x.date}${x.time?' à '+x.time:''}.`}}]},'Action attendue':{rich_text:[{type:'text',text:{content:'Confirmer la disponibilité, préparer la mission et signaler tout risque de retard.'}}]},'Destinataire':{rich_text:[{type:'text',text:{content:'Intervenante'}}]},'ID automatisation':{rich_text:[{type:'text',text:{content:x.automation_id}}]},'Dernière mise à jour':{date:{start:today}}}};return [{json:{...x,request_body:JSON.stringify(body)}}];"
+      },
+      "id": "0296df4f-0b0b-4228-903b-9d529616bf5b",
+      "name": "Préparer création rappel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "11a6dfe1-881f-4c9f-a893-d510de0e0e19",
+      "name": "Créer rappel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        -128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "9fcb18fe-11c7-4fe6-9cdf-3c19f11a018d",
+      "name": "Fin mission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        -128
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclenchement manuel": {
+      "main": [
+        [
+          {
+            "node": "Préparer dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer dates": {
+      "main": [
+        [
+          {
+            "node": "Lire missions à rappeler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire missions à rappeler": {
+      "main": [
+        [
+          {
+            "node": "Préparer rappels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer rappels": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque mission": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Préparer recherche doublon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer recherche doublon": {
+      "main": [
+        [
+          {
+            "node": "Chercher rappel existant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher rappel existant": {
+      "main": [
+        [
+          {
+            "node": "Décider rappel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider rappel": {
+      "main": [
+        [
+          {
+            "node": "Rappel absent ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rappel absent ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer création rappel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fin mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer création rappel": {
+      "main": [
+        [
+          {
+            "node": "Créer rappel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer rappel": {
+      "main": [
+        [
+          {
+            "node": "Fin mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fin mission": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e5e5f16c-1ef8-4c61-81a9-5aa59a905f64",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "KulBD9roMzkO7pte",
+  "tags": []
+}
