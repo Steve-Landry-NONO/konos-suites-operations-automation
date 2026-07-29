@@ -1,0 +1,546 @@
+{
+  "name": "KONOS — Intervention terminée vers consommation et linge en service",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "7798c9ef-1f78-4816-9488-e175e1bf4fae",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -688,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/71cb042a-8768-4afa-be06-45895e262b0b/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: {\n    property: \"Statut\",\n    select: {\n      equals: \"Terminée\"\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "c4f4b5f7-a168-4bac-9bbf-0b9fdf810e59",
+      "name": "Lire interventions terminées",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = ($json.results ?? []).map(p => p.id);\nif (ids.length === 0) return [{json:{has_completed_interventions:false}}];\nconst relationOr = ids.map(id => ({property:'Intervention liée',relation:{contains:id}}));\nreturn [{json:{\n  has_completed_interventions:true,\n  consumables_filter:{and:[\n    {or:relationOr},\n    {property:'Type mouvement',select:{equals:'Réservation prévisionnelle'}},\n    {property:'Statut',select:{equals:'Prévisionnel'}}\n  ]},\n  linen_filter:{and:[\n    {or:relationOr},\n    {property:'Type mouvement',select:{equals:'Réservation stock'}},\n    {property:'Statut',select:{equals:'Prévisionnel'}}\n  ]}\n}}];"
+      },
+      "id": "5466f123-adac-4e73-aaa0-793c5a1be3f0",
+      "name": "Préparer les filtres",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-completed",
+              "leftValue": "={{$json.has_completed_interventions}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0f274d11-871f-4fa9-8541-13dfaa901c86",
+      "name": "Interventions terminées trouvées ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -48,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/bc358e38-869f-461c-8242-8709d2bfe985/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: $json.consumables_filter\n}) }}",
+        "options": {}
+      },
+      "id": "b7b52214-3c5f-4c7b-ac23-028c61af06e5",
+      "name": "Lire consommables prévisionnels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.results ?? []).map(p=>({json:{movement_page_id:p.id}}));"
+      },
+      "id": "cf308b60-daf2-49e2-85a1-7134273ddc5d",
+      "name": "Préparer confirmations consommables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "73277314-c412-4b54-8ccc-5bfb997a5bd3",
+      "name": "Traiter chaque consommable",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        624,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.notion.com/v1/pages/{{$json.movement_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  properties: {\n    \"Type mouvement\": {\n      select: {\n        name: \"Consommation confirmée\"\n      }\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Commentaire\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Consommation confirmée automatiquement après clôture de l’intervention.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "42f2a0e4-93ca-4788-91d8-58b29beb8b90",
+      "name": "Confirmer consommation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "730c515a-cd31-4b1a-b01f-8423d6856255",
+      "name": "Consommable confirmé",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: $json.linen_filter\n}) }}",
+        "options": {}
+      },
+      "id": "3b3b67e9-778a-4a18-927c-c5cba707f69e",
+      "name": "Lire linge réservé",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.results ?? []).map(p=>({json:{movement_page_id:p.id}}));"
+      },
+      "id": "34d58491-398b-46c1-8ca4-64eb7dae74ad",
+      "name": "Préparer mises en service linge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "38f7ad49-42b0-425a-8f29-ff23b4df8fd9",
+      "name": "Traiter chaque linge",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        624,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.notion.com/v1/pages/{{$json.movement_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  properties: {\n    \"Type mouvement\": {\n      select: {\n        name: \"Installation logement\"\n      }\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Commentaire\": {\n      rich_text: [\n        {\n          type: \"text\",\n          text: {\n            content: \"Linge mis en service automatiquement après clôture de l’intervention.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "e15f6d11-9731-46a0-83e0-52acfe25800a",
+      "name": "Mettre linge en service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "d28029ea-b44c-462e-834c-57291684a5c3",
+      "name": "Linge mis en service",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true,message:'Aucune intervention terminée à traiter.'}}];"
+      },
+      "id": "b715ea05-2078-4908-bfe2-aab68d15c49f",
+      "name": "Rien à traiter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        384
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire interventions terminées",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire interventions terminées": {
+      "main": [
+        [
+          {
+            "node": "Préparer les filtres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les filtres": {
+      "main": [
+        [
+          {
+            "node": "Interventions terminées trouvées ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interventions terminées trouvées ?": {
+      "main": [
+        [
+          {
+            "node": "Lire consommables prévisionnels",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lire linge réservé",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rien à traiter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire consommables prévisionnels": {
+      "main": [
+        [
+          {
+            "node": "Préparer confirmations consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer confirmations consommables": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque consommable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque consommable": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Confirmer consommation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmer consommation": {
+      "main": [
+        [
+          {
+            "node": "Consommable confirmé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consommable confirmé": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque consommable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire linge réservé": {
+      "main": [
+        [
+          {
+            "node": "Préparer mises en service linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer mises en service linge": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque linge": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mettre linge en service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre linge en service": {
+      "main": [
+        [
+          {
+            "node": "Linge mis en service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linge mis en service": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4e893b5c-023d-41a6-aad9-336038f942fb",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "XlTU8UxD2nrtPUjH",
+  "tags": []
+}

@@ -1,0 +1,404 @@
+{
+  "name": "KONOS — Sync Interventions vers Missions intervenante",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "39e8a54c-d2e6-4f45-b8a6-f653eea1d128",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1520,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/71cb042a-8768-4afa-be06-45895e262b0b/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":100,\"filter\":{\"and\":[{\"property\":\"Validation réservation\",\"checkbox\":{\"equals\":true}},{\"property\":\"Statut\",\"select\":{\"does_not_equal\":\"Terminée\"}}]}}",
+        "options": {}
+      },
+      "id": "83da9f26-88e8-4d7f-8c08-e6c74e3d365f",
+      "name": "Lire interventions internes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1312,
+        -304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function text(prop) { return prop?.rich_text?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? ''; }\nfunction title(prop) { return prop?.title?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? ''; }\nfunction number(prop) { return prop?.number ?? 0; }\nfunction checkbox(prop) { return !!prop?.checkbox; }\nfunction select(prop) { return prop?.select?.name ?? ''; }\nfunction dateStart(prop) { return prop?.date?.start ?? null; }\nconst statusMap = {'À générer':'À préparer','À planifier':'À préparer','Planifiée':'À préparer','En cours':'En cours','En attente':'Bloquée','Terminée':'Terminée','Annulée':'Annulée','Problème':'Bloquée'};\nreturn ($json.results ?? []).map((page) => {\n const p = page.properties; const sourceId = page.id.replaceAll('-', ''); const statutInterne = select(p['Statut']); const incident = checkbox(p['Incident constaté']);\n const instructions = [text(p['Demandes particulières']), text(p['Contrainte horaire']), text(p['Arrivée voyageur validée']) ? `Arrivée validée : ${text(p['Arrivée voyageur validée'])}` : ''].filter(Boolean).join(' ');\n const missionProperties = {\n  'Mission': {title:[{text:{content:title(p['Intervention']) || `Intervention ${sourceId}`}}]},\n  'Date intervention': {date: dateStart(p['Date intervention']) ? {start:dateStart(p['Date intervention'])} : null},\n  'Heure prévue': {rich_text:[{text:{content:text(p['Heure début prévue'])}}]},\n  'Statut': {select:{name:statusMap[statutInterne] ?? 'À préparer'}},\n  'Priorité': {select:{name:select(p['Priorité']) === 'Basse' ? 'Normale' : (select(p['Priorité']) || 'Normale')}},\n  'Voyageurs': {number:number(p['Nb voyageurs'])},\n  'Lit chambre requis': {checkbox:checkbox(p['Lit chambre à préparer'])},\n  'Canapé-lit requis': {checkbox:checkbox(p['Canapé-lit à préparer'])},\n  'Jeux chambre requis': {number:number(p['Jeux chambre à prendre'])},\n  'Jeux canapé requis': {number:number(p['Jeux canapé à prendre'])},\n  'Taies requises': {number:number(p['Taies à prendre'])},\n  'Grandes serviettes requises': {number:number(p['Serviettes à prendre'])},\n  'Tapis bain requis': {number:number(p['Tapis bain à prendre'])},\n  'Torchons requis': {number:number(p['Torchons à prendre'])},\n  'Bouteilles eau requises': {number:number(p['Bouteilles eau à installer'])},\n  'Capsules café requises': {number:number(p['Capsules T-disc à installer'])},\n  'Rouleaux WC prévus': {number:number(p['Rouleaux WC à installer'])},\n  'Sacs cuisine prévus': {number:number(p['Sacs cuisine à prévoir'])},\n  'Sacs WC prévus': {number:number(p['Sacs WC à prévoir'])},\n  'Instructions particulières': {rich_text:[{text:{content:instructions}}]},\n  'Incident': {checkbox:incident},\n  'Type incident': incident && select(p['Type incident']) !== 'Aucun' ? {select:{name:select(p['Type incident'])}} : {select:null},\n  'Description incident': {rich_text:[{text:{content:text(p['Description incident'])}}]},\n  'Notes intervenante': {rich_text:[{text:{content:text(p['Compte rendu'])}}]},\n  'ID intervention source': {rich_text:[{text:{content:sourceId}}]},\n  'Source': {select:{name:'n8n'}},\n  'Dernière synchronisation': {date:{start:new Date().toISOString()}}\n };\n if (!dateStart(p['Date intervention'])) delete missionProperties['Date intervention'];\n return {json:{source_page_id:page.id,source_id_compact:sourceId,mission_properties:missionProperties,source_last_edited_time:page.last_edited_time},pairedItem:{item:0}};\n});"
+      },
+      "id": "13d3d8c3-607e-4b0b-a369-b42a9c89b540",
+      "name": "Préparer données autorisées",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "941d2723-ce38-47e8-90a4-cdb09e6792e5",
+      "name": "Traiter chaque intervention",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -832,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/dfb3ee8c-d3a2-4cf3-98d5-f93d7c1c32e6/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":1,\"filter\":{\"property\":\"ID intervention source\",\"rich_text\":{\"equals\":\"{{$json.source_id_compact}}\"}}}",
+        "options": {}
+      },
+      "id": "06af7829-a2eb-4ef4-9e9d-36a2853d23d5",
+      "name": "Chercher mission existante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -592,
+        -304
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Traiter chaque intervention').item.json; const result = $json.results?.[0]; return [{json:{...source,mission_exists:!!result,mission_page_id:result?.id ?? null},pairedItem:{item:0}}];"
+      },
+      "id": "c23a73d0-d0dd-4855-a09c-966e15ac5da4",
+      "name": "Décider création ou mise à jour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "exists-condition",
+              "leftValue": "={{$json.mission_exists}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c8fc372c-1086-4741-b117-e10c5e086070",
+      "name": "Mission existe ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -144,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.notion.com/v1/pages/{{$json.mission_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({properties: $json.mission_properties}) }}",
+        "options": {}
+      },
+      "id": "b00985f5-a144-470f-88e5-980e0281eced",
+      "name": "Mettre à jour mission",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        96,
+        -416
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({parent: {data_source_id: 'dfb3ee8c-d3a2-4cf3-98d5-f93d7c1c32e6'}, properties: $json.mission_properties}) }}",
+        "options": {}
+      },
+      "id": "244e55d2-221a-4bac-b5f7-f9a72f4bb61c",
+      "name": "Créer mission",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        96,
+        -208
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true,mission_page_id:$json.id,synced_at:new Date().toISOString()},pairedItem:{item:0}}];"
+      },
+      "id": "0ba58997-44fa-4af4-a1aa-07b9d5c4a394",
+      "name": "Synchronisation réussie",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire interventions internes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire interventions internes": {
+      "main": [
+        [
+          {
+            "node": "Préparer données autorisées",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer données autorisées": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque intervention": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Chercher mission existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher mission existante": {
+      "main": [
+        [
+          {
+            "node": "Décider création ou mise à jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider création ou mise à jour": {
+      "main": [
+        [
+          {
+            "node": "Mission existe ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mission existe ?": {
+      "main": [
+        [
+          {
+            "node": "Mettre à jour mission",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Créer mission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre à jour mission": {
+      "main": [
+        [
+          {
+            "node": "Synchronisation réussie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer mission": {
+      "main": [
+        [
+          {
+            "node": "Synchronisation réussie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synchronisation réussie": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f92aea31-da0d-4fd2-b5e3-2ae3b0c0b290",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "1ZcSnT2T6IXfyrNi",
+  "tags": []
+}
