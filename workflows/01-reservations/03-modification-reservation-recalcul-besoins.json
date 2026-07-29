@@ -1,0 +1,1154 @@
+{
+  "name": "KONOS — Modification réservation vers recalcul des besoins",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c3c2e247-8ba8-4f1e-a372-a91596601446",
+      "name": "Déclenchement manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2832,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/a6770a38-9710-4026-bd17-4d0937093c3c/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"page_size\": 100,\n  \"filter\": {\"and\": [\n    {\"property\":\"Validation admin\",\"checkbox\":{\"equals\":true}},\n    {\"property\":\"Statut réservation\",\"select\":{\"does_not_equal\":\"Annulée\"}},\n    {\"property\":\"Statut réservation\",\"select\":{\"does_not_equal\":\"Terminée\"}},\n    {\"property\":\"Statut réservation\",\"select\":{\"does_not_equal\":\"No-show\"}},\n    {\"or\": [\n      {\"property\":\"Recalcul besoins requis\",\"checkbox\":{\"equals\":true}},\n      {\"property\":\"Statut réservation\",\"select\":{\"equals\":\"Modifiée\"}}\n    ]}\n  ]}\n}",
+        "options": {}
+      },
+      "id": "8a92249f-63ca-4e10-8df4-d1bd54a99a7f",
+      "name": "Lire réservations à recalculer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2608,
+        288
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction title(p){return (p?.title??[]).map(x=>x.plain_text??x.text?.content??'').join('')}\nfunction text(p){return (p?.rich_text??[]).map(x=>x.plain_text??x.text?.content??'').join('')}\nfunction num(p){return typeof p?.number==='number'?p.number:0}\nfunction chk(p){return !!p?.checkbox}\nfunction sel(p){return p?.select?.name??''}\nfunction dateStart(p){return p?.date?.start??''}\nfunction rel(p){return (p?.relation??[]).map(x=>x.id)}\nreturn ($json.results??[]).map(r=>{const p=r.properties??{};const payload={arrival:dateStart(p['Arrivée']),departure:dateStart(p['Départ']),travelers:num(p['Voyageurs']),adults:num(p['Adultes']),children:num(p['Enfants']),nights:num(p['Nb nuits']),bedding:sel(p['Couchages']),separate_beds:chk(p['Demande couchages séparés']),bedroom_bed:chk(p['Lit chambre requis']),sofa_bed:chk(p['Canapé-lit requis']),bedroom_sets:num(p['Jeux chambre requis']),sofa_sets:num(p['Jeux canapé requis']),towels:num(p['Serviettes']),pillowcases:num(p['Taies requises']),bathmats:num(p['Tapis bain requis']),towels_kitchen:num(p['Torchons requis']),water:num(p['Bouteilles eau requises']),coffee:num(p['Capsules T-disc requises']),wc_rolls:num(p['Rouleaux WC prévus']),kitchen_bags:num(p['Sacs cuisine prévus']),wc_bags:num(p['Sacs WC prévus']),arrival_time:text(p['Heure arrivée validée'])||text(p['Heure arrivée prévue']),departure_time:text(p['Heure départ prévue']),particularities:text(p['Particularités'])};const fingerprint=JSON.stringify(payload);const oldFingerprint=text(p['Empreinte besoins appliquée']);return {json:{reservation_page_id:r.id,reservation_name:title(p['Réservation'])||r.id,reservation_status:sel(p['Statut réservation']),intervention_ids:rel(p['Interventions']),fingerprint,old_fingerprint:oldFingerprint,changed:fingerprint!==oldFingerprint,...payload}};});\n"
+      },
+      "id": "6ddf684a-3a01-4032-a2f7-394755179608",
+      "name": "Calculer empreinte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2384,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e7fdc4a2-28c1-40f7-82ac-5953407761f2",
+      "name": "Traiter chaque réservation",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2176,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "changed",
+              "leftValue": "={{$json.changed}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3ee8cc29-5d3d-48a0-a58a-27334520c60d",
+      "name": "Besoins modifiés ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1952,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "has-intervention",
+              "leftValue": "={{$json.intervention_ids.length > 0}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a87ebc6-c3b8-4f46-9006-2de72b74e4dc",
+      "name": "Intervention liée ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1728,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.intervention_ids??[]).map(id=>({json:{...$json,intervention_id:id}}));"
+      },
+      "id": "c86808f0-deae-4ed5-b889-c8516572f9b6",
+      "name": "Déplier interventions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "499df816-e38f-410a-8276-7931e78fcc68",
+      "name": "Traiter chaque intervention",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1296,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.intervention_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f8e1063c-4d4b-438e-8114-b5016910bbc6",
+      "name": "Lire intervention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1072,
+        112
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('Traiter chaque intervention').item.json;const p=$json.properties??{};const status=p.Statut?.select?.name??'';const blocked=['En cours','Terminée','Annulée'].includes(status);return [{json:{...ctx,intervention_status:status,blocked}}];"
+      },
+      "id": "d9e9497e-c7bf-4fbb-b6c2-a8bfb14656e5",
+      "name": "Contrôler intervention",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "blocked",
+              "leftValue": "={{$json.blocked}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "064eee31-ad29-45ae-bc4f-2371b83de28d",
+      "name": "Recalcul autorisé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -624,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst x=$json;const body={properties:{'Date intervention':{date:{start:x.arrival||null}},'Nb voyageurs':{number:Number(x.travelers||0)},'Nb nuits':{number:Number(x.nights||0)},'Lit chambre à préparer':{checkbox:!!x.bedroom_bed},'Canapé-lit à préparer':{checkbox:!!x.sofa_bed},'Jeux chambre à prendre':{number:Number(x.bedroom_sets||0)},'Jeux canapé à prendre':{number:Number(x.sofa_sets||0)},'Serviettes à prendre':{number:Number(x.towels||0)},'Taies à prendre':{number:Number(x.pillowcases||0)},'Tapis bain à prendre':{number:Number(x.bathmats||0)},'Torchons à prendre':{number:Number(x.towels_kitchen||0)},'Bouteilles eau à installer':{number:Number(x.water||0)},'Capsules T-disc à installer':{number:Number(x.coffee||0)},'Rouleaux WC à installer':{number:Number(x.wc_rolls||0)},'Sacs cuisine à prévoir':{number:Number(x.kitchen_bags||0)},'Sacs WC à prévoir':{number:Number(x.wc_bags||0)},'Arrivée voyageur validée':{rich_text:[{type:'text',text:{content:x.arrival_time||''}}]},'Demandes particulières':{rich_text:[{type:'text',text:{content:x.particularities||''}}]},'Date dernière mise à jour':{date:{start:new Date().toISOString().slice(0,10)}}}};if(!x.arrival) delete body.properties['Date intervention'];return [{json:{...x,request_body:JSON.stringify(body)}}];\n"
+      },
+      "id": "1fc000c1-f26b-45c6-aeb1-29aa6469cdbb",
+      "name": "Préparer mise à jour intervention",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.intervention_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "98994758-f9b1-4970-8507-c46864a32402",
+      "name": "Mettre à jour intervention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -192,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({page_size:100,filter:{and:[{property:'Intervention liée',relation:{contains:$json.intervention_id}},{property:'Type mouvement',select:{equals:'Réservation stock'}},{property:'Statut',select:{equals:'Prévisionnel'}}]}}) }}",
+        "options": {}
+      },
+      "id": "e00b3fb1-f9b8-440f-8118-ed3ea49ff73b",
+      "name": "Lire anciennes réservations linge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        32,
+        -80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/bc358e38-869f-461c-8242-8709d2bfe985/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({page_size:100,filter:{and:[{property:'Intervention liée',relation:{contains:$json.intervention_id}},{property:'Type mouvement',select:{equals:'Réservation prévisionnelle'}},{property:'Statut',select:{equals:'Prévisionnel'}}]}}) }}",
+        "options": {}
+      },
+      "id": "9ff619d8-a487-4058-98a4-88afdee91e3c",
+      "name": "Lire anciennes réservations consommables",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        32,
+        128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('Préparer mise à jour intervention').item.json;return ($json.results??[]).map(m=>({json:{...ctx,domain:'linge',movement_id:m.id,old_automation_id:(m.properties?.['ID automatisation']?.rich_text??[]).map(x=>x.plain_text??'').join('')}}));"
+      },
+      "id": "21b8292f-93fa-4ec3-b0d2-44d3bf837ecd",
+      "name": "Préparer annulations linge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx=$('Préparer mise à jour intervention').item.json;return ($json.results??[]).map(m=>({json:{...ctx,domain:'consommable',movement_id:m.id,old_automation_id:(m.properties?.['ID automatisation']?.rich_text??[]).map(x=>x.plain_text??'').join('')}}));"
+      },
+      "id": "85cec52a-79a9-416e-89cc-ad20e433dbbd",
+      "name": "Préparer annulations consommables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        128
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8bd1a9fd-6947-4c42-a106-ceb5ebd8cd5f",
+      "name": "Fusionner anciens mouvements",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "842efbc6-6c68-448f-b15a-e1684b85fe4c",
+      "name": "Traiter chaque ancien mouvement",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        704,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'');const newId=(x.old_automation_id||('ancien:'+x.movement_id.replaceAll('-','')))+':remplace:'+stamp;return [{json:{...x,request_body:JSON.stringify({properties:{'Statut':{select:{name:'Annulé'}},'ID automatisation':{rich_text:[{type:'text',text:{content:newId}}]},'Commentaire':{rich_text:[{type:'text',text:{content:'Réservation prévisionnelle remplacée après modification de la réservation.'}}]}})}}];"
+      },
+      "id": "9c00ab01-8ef7-4e45-a993-4abbe130dfc7",
+      "name": "Préparer annulation mouvement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.movement_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "b0f94a9c-196c-46f6-8f95-6ba6d78fd8e9",
+      "name": "Annuler ancien mouvement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "77b9db03-9061-486c-9cc2-08051c7f7835",
+      "name": "Ancien mouvement traité",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst x=$('Préparer mise à jour intervention').first().json;return [{json:{...x,request_body:JSON.stringify({properties:{'Empreinte besoins appliquée':{rich_text:[{type:'text',text:{content:x.fingerprint}}]},'Recalcul besoins requis':{checkbox:false},'Statut recalcul besoins':{select:{name:'Traité'}},'Dernier recalcul besoins':{date:{start:new Date().toISOString().slice(0,10)}},'Statut réservation':{select:{name:'Confirmée'}},'Erreur automatisation':{rich_text:[]}}})}}];\n"
+      },
+      "id": "8acbad22-6a27-45e1-abd2-b58427613d3d",
+      "name": "Préparer validation réservation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.reservation_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "5562737c-2033-454a-9d5a-8a2513c28e03",
+      "name": "Valider recalcul réservation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1136,
+        272
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "1e8ce4fb-a836-4abb-8f46-7b5e98bebdf6",
+      "name": "Intervention traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;return [{json:{...x,request_body:JSON.stringify({properties:{'Recalcul besoins requis':{checkbox:true},'Statut recalcul besoins':{select:{name:'Bloqué'}},'Erreur automatisation':{rich_text:[{type:'text',text:{content:'Recalcul bloqué : aucune intervention liée.'}}]}})}}];"
+      },
+      "id": "d3c0700f-e28f-4a30-a4ef-b0d3cabf134c",
+      "name": "Préparer blocage sans intervention",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.reservation_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "1910c924-8e77-447b-8134-7c19552f5373",
+      "name": "Bloquer sans intervention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1200,
+        272
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;return [{json:{...x,request_body:JSON.stringify({properties:{'Recalcul besoins requis':{checkbox:true},'Statut recalcul besoins':{select:{name:'Bloqué'}},'Erreur automatisation':{rich_text:[{type:'text',text:{content:'Recalcul bloqué : intervention déjà '+x.intervention_status+'.'}}]}})}}];"
+      },
+      "id": "640a513a-4c5b-4731-8c3c-809b773f4630",
+      "name": "Préparer blocage intervention",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.reservation_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "8e3cf4a8-00a3-4cf8-9d2f-15442f9f05ea",
+      "name": "Bloquer intervention engagée",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -192,
+        224
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;return [{json:{...x,request_body:JSON.stringify({properties:{'Recalcul besoins requis':{checkbox:false},'Statut recalcul besoins':{select:{name:'Traité'}},'Dernier recalcul besoins':{date:{start:new Date().toISOString().slice(0,10)}}}})}}];"
+      },
+      "id": "c4a77507-3ccf-49b0-bac2-5c35489be9ab",
+      "name": "Préparer absence de changement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1824,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\" + $json.reservation_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "595994c1-202d-4b7f-850e-5e412e87c476",
+      "name": "Marquer sans changement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        496
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "27127019-8ecc-4231-9ad3-be0cb1a6321e",
+      "name": "Réservation traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        288
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Déclenchement manuel": {
+      "main": [
+        [
+          {
+            "node": "Lire réservations à recalculer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire réservations à recalculer": {
+      "main": [
+        [
+          {
+            "node": "Calculer empreinte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer empreinte": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque réservation": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Besoins modifiés ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Besoins modifiés ?": {
+      "main": [
+        [
+          {
+            "node": "Intervention liée ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer absence de changement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intervention liée ?": {
+      "main": [
+        [
+          {
+            "node": "Déplier interventions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer blocage sans intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déplier interventions": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque intervention": {
+      "main": [
+        [
+          {
+            "node": "Préparer validation réservation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lire intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire intervention": {
+      "main": [
+        [
+          {
+            "node": "Contrôler intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contrôler intervention": {
+      "main": [
+        [
+          {
+            "node": "Recalcul autorisé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recalcul autorisé ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer mise à jour intervention",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer blocage intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer mise à jour intervention": {
+      "main": [
+        [
+          {
+            "node": "Mettre à jour intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre à jour intervention": {
+      "main": [
+        [
+          {
+            "node": "Lire anciennes réservations linge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lire anciennes réservations consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire anciennes réservations linge": {
+      "main": [
+        [
+          {
+            "node": "Préparer annulations linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer annulations linge": {
+      "main": [
+        [
+          {
+            "node": "Fusionner anciens mouvements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire anciennes réservations consommables": {
+      "main": [
+        [
+          {
+            "node": "Préparer annulations consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer annulations consommables": {
+      "main": [
+        [
+          {
+            "node": "Fusionner anciens mouvements",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fusionner anciens mouvements": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque ancien mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque ancien mouvement": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer annulation mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer annulation mouvement": {
+      "main": [
+        [
+          {
+            "node": "Annuler ancien mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Annuler ancien mouvement": {
+      "main": [
+        [
+          {
+            "node": "Ancien mouvement traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ancien mouvement traité": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque ancien mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer validation réservation": {
+      "main": [
+        [
+          {
+            "node": "Valider recalcul réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valider recalcul réservation": {
+      "main": [
+        [
+          {
+            "node": "Intervention traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intervention traitée": {
+      "main": [
+        [
+          {
+            "node": "Réservation traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer blocage sans intervention": {
+      "main": [
+        [
+          {
+            "node": "Bloquer sans intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bloquer sans intervention": {
+      "main": [
+        [
+          {
+            "node": "Réservation traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer blocage intervention": {
+      "main": [
+        [
+          {
+            "node": "Bloquer intervention engagée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bloquer intervention engagée": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer absence de changement": {
+      "main": [
+        [
+          {
+            "node": "Marquer sans changement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer sans changement": {
+      "main": [
+        [
+          {
+            "node": "Réservation traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réservation traitée": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9fa83a4d-7cdc-441b-b779-47be1fd6316e",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "E3eKmItrAIScuRQg",
+  "tags": []
+}

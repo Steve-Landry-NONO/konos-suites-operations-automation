@@ -1,0 +1,916 @@
+{
+  "name": "KONOS — Annulation ou no-show vers libération des stocks",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "1e7870a0-b2e4-41f1-9a4e-c5bcb350eb60",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1424,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/a6770a38-9710-4026-bd17-4d0937093c3c/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\n  \"page_size\": 100,\n  \"filter\": {\n    \"and\": [\n      {\n        \"or\": [\n          {\"property\":\"Statut réservation\",\"select\":{\"equals\":\"Annulée\"}},\n          {\"property\":\"Statut réservation\",\"select\":{\"equals\":\"No-show\"}}\n        ]\n      },\n      {\"property\":\"Annulation stock traitée\",\"checkbox\":{\"equals\":false}}\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "d407e815-03ca-4af6-952b-5a04d8b842a8",
+      "name": "Lire réservations annulées",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1232,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($json.results??[]).map(r=>({json:{\n  reservation_page_id:r.id,\n  reservation_name:(r.properties?.Réservation?.title??[]).map(x=>x.plain_text??'').join('')||r.id,\n  reservation_status:r.properties?.['Statut réservation']?.select?.name,\n  intervention_ids:(r.properties?.Interventions?.relation??[]).map(x=>x.id)\n}}));"
+      },
+      "id": "48237a7c-2725-450c-9bd6-8f23652576ed",
+      "name": "Préparer annulations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "7f536a9a-0fe1-4129-92b9-3048bbcc4d6e",
+      "name": "Traiter chaque réservation",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -832,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json;\nreturn (r.intervention_ids??[]).map(id=>({json:{...r,intervention_id:id}}));"
+      },
+      "id": "321df384-0c07-415b-94ae-bc4c4614f380",
+      "name": "Déplier interventions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "63a30194-9ffc-416f-b7b6-fb5eb108528a",
+      "name": "Traiter chaque intervention",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -432,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://api.notion.com/v1/pages/\" + $json.intervention_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f2a67d1f-1006-4468-8531-ea7d224abb16",
+      "name": "Lire intervention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Traiter chaque intervention').item.json;\nconst p=$json.properties??{};\nreturn [{json:{\n ...c,\n intervention_status:p.Statut?.select?.name??'',\n can_cancel_intervention:!['En cours','Terminée','Annulée'].includes(p.Statut?.select?.name??'')\n}}];"
+      },
+      "id": "bcdbbc87-0edd-4598-abbd-e02429f7f9f1",
+      "name": "Préparer libérations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: {\n    and: [\n      {\n        property: \"Intervention liée\",\n        relation: {\n          contains: $json.intervention_id\n        }\n      },\n      {\n        property: \"Type mouvement\",\n        select: {\n          equals: \"Réservation stock\"\n        }\n      },\n      {\n        property: \"Statut\",\n        select: {\n          equals: \"Prévisionnel\"\n        }\n      }\n    ]\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "224508f5-cc82-4d58-8736-762b314b347e",
+      "name": "Lire réservations linge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        -128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer libérations').item.json;\nreturn ($json.results??[]).map(m=>({json:{\n ...c,\n domain:'linge',\n source_movement_id:m.id,\n article_id:m.properties?.['Article linge']?.relation?.[0]?.id,\n quantity:m.properties?.Quantité?.number??0,\n automation_id:'annulation-linge:'+m.id.replaceAll('-','')\n}}));"
+      },
+      "id": "df6c94e1-f020-474b-9c91-82a3db14b47c",
+      "name": "Préparer libérations linge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/bc358e38-869f-461c-8242-8709d2bfe985/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 100,\n  filter: {\n    and: [\n      {\n        property: \"Intervention liée\",\n        relation: {\n          contains: $json.intervention_id\n        }\n      },\n      {\n        property: \"Type mouvement\",\n        select: {\n          equals: \"Réservation prévisionnelle\"\n        }\n      },\n      {\n        property: \"Statut\",\n        select: {\n          equals: \"Prévisionnel\"\n        }\n      }\n    ]\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "e0b9ec19-a359-4148-a48e-ed6be5475101",
+      "name": "Lire réservations consommables",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer libérations').item.json;\nreturn ($json.results??[]).map(m=>({json:{\n ...c,\n domain:'consommable',\n source_movement_id:m.id,\n article_id:m.properties?.Article?.relation?.[0]?.id,\n quantity:m.properties?.Quantité?.number??0,\n automation_id:'annulation-consommable:'+m.id.replaceAll('-','')\n}}));"
+      },
+      "id": "fdb88ee3-8a3c-494b-82b3-83f1091ed386",
+      "name": "Préparer libérations consommables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        192
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2221e11b-eefa-43e4-8239-eda8b990973d",
+      "name": "Fusionner libérations",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f1a2641e-dcb6-470f-8265-52eee5a6bc40",
+      "name": "Traiter chaque libération",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        800,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.domain === \"linge\" ? \"https://api.notion.com/v1/data_sources/4b7d29cf-082a-4135-8695-6e638e20dd26/query\" : \"https://api.notion.com/v1/data_sources/bc358e38-869f-461c-8242-8709d2bfe985/query\" }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"ID automatisation\",\n    rich_text: {\n      equals: $json.automation_id\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "28ab7771-57ee-43cb-b5bc-ff2119cb1bc8",
+      "name": "Chercher libération existante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1008,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Traiter chaque libération').item.json;\nreturn [{json:{...c,exists:($json.results??[]).length>0,valid:!!c.article_id&&c.quantity>0}}];"
+      },
+      "id": "0d7b8f02-5429-41bd-a472-1be6be58e975",
+      "name": "Décider libération",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "create",
+              "leftValue": "={{$json.exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ae5c93cf-cfbf-40d9-a2bf-ff5d392e8b2b",
+      "name": "Créer libération ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1408,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"4b7d29cf-082a-4135-8695-6e638e20dd26\"\n  },\n  properties: {\n    \"Mouvement\": {\n      title: [{\n        type: \"text\",\n        text: {\n          content: \"Libération réservation — \" +\n            ($json.reservation_name ?? $json.nom_de_la_réservation ?? \"Réservation\")\n        }\n      }]\n    },\n    \"Date mouvement\": {\n      date: {\n        start: new Date().toISOString().slice(0, 10)\n      }\n    },\n    \"Type mouvement\": {\n      select: {\n        name: \"Libération réservation\"\n      }\n    },\n    \"Quantité\": {\n      number: Number($json.quantity ?? $json.quantité ?? 0)\n    },\n    \"Article linge\": {\n      relation: [{\n        id: $json.article_id\n      }]\n    },\n    \"Intervention liée\": {\n      relation: [{\n        id: $json.intervention_id\n      }]\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Créé par\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"ID automatisation\": {\n      rich_text: [{\n        type: \"text\",\n        text: {\n          content: $json.automation_id\n        }\n      }]\n    },\n    \"Commentaire\": {\n      rich_text: [{\n        type: \"text\",\n        text: {\n          content: \"Réservation \" +\n            ($json.reservation_status ?? $json.statut_réservation ?? \"annulée\") +\n            \" : linge libéré automatiquement.\"\n        }\n      }]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "45d9bc7a-8918-443c-937e-8ae97d569e15",
+      "name": "Créer libération linge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        -64
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"bc358e38-869f-461c-8242-8709d2bfe985\"\n  },\n  properties: {\n    \"Mouvement\": {\n      title: [{\n        type: \"text\",\n        text: {\n          content: \"Libération réservation — \" +\n            ($json.reservation_name ?? $json.nom_de_la_réservation ?? \"Réservation\")\n        }\n      }]\n    },\n    \"Date mouvement\": {\n      date: {\n        start: new Date().toISOString().slice(0, 10)\n      }\n    },\n    \"Type mouvement\": {\n      select: {\n        name: \"Libération réservation\"\n      }\n    },\n    \"Quantité\": {\n      number: Number($json.quantity ?? $json.quantité ?? 0)\n    },\n    \"Article\": {\n      relation: [{\n        id: $json.article_id\n      }]\n    },\n    \"Intervention liée\": {\n      relation: [{\n        id: $json.intervention_id\n      }]\n    },\n    \"Statut\": {\n      select: {\n        name: \"Confirmé\"\n      }\n    },\n    \"Créé par\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"ID automatisation\": {\n      rich_text: [{\n        type: \"text\",\n        text: {\n          content: $json.automation_id\n        }\n      }]\n    },\n    \"Commentaire\": {\n      rich_text: [{\n        type: \"text\",\n        text: {\n          content: \"Réservation \" +\n            ($json.reservation_status ?? $json.statut_réservation ?? \"annulée\") +\n            \" : consommable libéré automatiquement.\"\n        }\n      }]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "1bc86f7b-6e99-48d0-a147-2bee1ebf13f2",
+      "name": "Créer libération consommable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "linge",
+              "leftValue": "={{$json.domain}}",
+              "rightValue": "linge",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "15b1b970-622a-43bb-a8ed-1062a196edd2",
+      "name": "Type linge ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "c31282e7-8710-4a3e-bfb8-6dbd2f4ed04d",
+      "name": "Libération traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ \"https://api.notion.com/v1/pages/\" + $(\"Traiter chaque intervention\").first().json.intervention_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  properties: {\n    \"Statut\": {\n      select: {\n        name: \"Annulée\"\n      }\n    },\n    \"Paiement intervenant\": {\n      select: {\n        name: \"Non dû\"\n      }\n    },\n    \"Compte rendu\": {\n      rich_text: [{\n        type: \"text\",\n        text: {\n          content:\n            \"Intervention annulée automatiquement car la réservation est \" +\n            (\n              $(\"Traiter chaque intervention\").first().json.statut_réservation ??\n              \"Annulée\"\n            ) +\n            \".\"\n        }\n      }]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "abe8f889-38fe-41b9-9331-7e1d3c30ed9a",
+      "name": "Annuler intervention",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2048,
+        32
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ \"https://api.notion.com/v1/pages/\" + $(\"Préparer annulations\").first().json.reservation_page_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "{\n  \"properties\": {\n    \"Annulation stock traitée\": {\n      \"checkbox\": true\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "3b472b89-3c31-401a-82a6-f000805d1afa",
+      "name": "Marquer annulation traitée",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        32
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true}}];"
+      },
+      "id": "0dc50bf0-17b1-480e-b527-f04b023f724f",
+      "name": "Réservation traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        32
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire réservations annulées",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire réservations annulées": {
+      "main": [
+        [
+          {
+            "node": "Préparer annulations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer annulations": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque réservation": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Déplier interventions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déplier interventions": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque intervention": {
+      "main": [
+        [
+          {
+            "node": "Marquer annulation traitée",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lire intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire intervention": {
+      "main": [
+        [
+          {
+            "node": "Préparer libérations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer libérations": {
+      "main": [
+        [
+          {
+            "node": "Lire réservations linge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lire réservations consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire réservations linge": {
+      "main": [
+        [
+          {
+            "node": "Préparer libérations linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer libérations linge": {
+      "main": [
+        [
+          {
+            "node": "Fusionner libérations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire réservations consommables": {
+      "main": [
+        [
+          {
+            "node": "Préparer libérations consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer libérations consommables": {
+      "main": [
+        [
+          {
+            "node": "Fusionner libérations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fusionner libérations": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque libération",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque libération": {
+      "main": [
+        [
+          {
+            "node": "Annuler intervention",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chercher libération existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher libération existante": {
+      "main": [
+        [
+          {
+            "node": "Décider libération",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider libération": {
+      "main": [
+        [
+          {
+            "node": "Créer libération ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer libération ?": {
+      "main": [
+        [
+          {
+            "node": "Type linge ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Libération traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Type linge ?": {
+      "main": [
+        [
+          {
+            "node": "Créer libération linge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Créer libération consommable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer libération linge": {
+      "main": [
+        [
+          {
+            "node": "Libération traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer libération consommable": {
+      "main": [
+        [
+          {
+            "node": "Libération traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Libération traitée": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque libération",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Annuler intervention": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer annulation traitée": {
+      "main": [
+        [
+          {
+            "node": "Réservation traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réservation traitée": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "46915fd2-40d7-45e6-a944-eec1f6cb3653",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "dTZKWlAphktfENms",
+  "tags": []
+}

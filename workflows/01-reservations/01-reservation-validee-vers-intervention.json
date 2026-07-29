@@ -1,0 +1,377 @@
+{
+  "name": "KONOS — Réservation validée vers Intervention interne",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "a399c454-7f9f-4ae5-93fa-4935bfe08419",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1616,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/a6770a38-9710-4026-bd17-4d0937093c3c/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":100,\"filter\":{\"and\":[{\"property\":\"Validation admin\",\"checkbox\":{\"equals\":true}},{\"property\":\"Statut réservation\",\"select\":{\"equals\":\"Confirmée\"}}]},\"sorts\":[{\"property\":\"Arrivée\",\"direction\":\"ascending\"}]}",
+        "options": {}
+      },
+      "id": "fc24f805-e188-487d-86ec-93f032154e88",
+      "name": "Lire réservations validées",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1408,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function text(prop) { return prop?.rich_text?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? ''; }\nfunction title(prop) { return prop?.title?.map(x => x.plain_text ?? x.text?.content ?? '').join('') ?? ''; }\nfunction number(prop) { return prop?.number ?? 0; }\nfunction checkbox(prop) { return !!prop?.checkbox; }\nfunction dateStart(prop) { return prop?.date?.start ?? null; }\nconst monthNames = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];\nfunction frenchDateLabel(isoDate) { if (!isoDate) return 'date à confirmer'; const d = new Date(`${isoDate.slice(0,10)}T12:00:00Z`); return `${d.getUTCDate()} ${monthNames[d.getUTCMonth()]}`; }\nreturn ($json.results ?? []).map((page) => {\n  const p = page.properties;\n  const reservationId = page.id.replaceAll('-', '');\n  const arrival = dateStart(p['Arrivée']);\n  const guestName = text(p['Nom voyageur']) || title(p['Réservation']) || 'Voyageur à confirmer';\n  const specialInstructions = [text(p['Particularités']), text(p['Contrainte arrivée']), text(p['Heure arrivée validée']) ? `Arrivée validée : ${text(p['Heure arrivée validée'])}` : '', !text(p['Heure arrivée validée']) && text(p['Heure arrivée prévue']) ? `Arrivée prévue : ${text(p['Heure arrivée prévue'])}` : ''].filter(Boolean).join(' ');\n  const interventionProperties = {\n    'Intervention': { title: [{ text: { content: `Rotation — ${guestName} — ${frenchDateLabel(arrival)}` } }] },\n    'Réservation liée': { relation: [{ id: page.id }] },\n    'Statut': { select: { name: 'À planifier' } },\n    'Priorité': { select: { name: 'Normale' } },\n    'Type intervention': { select: { name: 'Rotation complète' } },\n    'Source création': { select: { name: 'n8n' } },\n    'Validation réservation': { checkbox: true },\n    'Paiement intervenant': { select: { name: 'À payer' } },\n    'Nb voyageurs': { number: number(p['Voyageurs']) },\n    'Nb nuits': { number: number(p['Nb nuits']) },\n    'Lit chambre à préparer': { checkbox: checkbox(p['Lit chambre requis']) },\n    'Canapé-lit à préparer': { checkbox: checkbox(p['Canapé-lit requis']) },\n    'Jeux chambre à prendre': { number: number(p['Jeux chambre requis']) },\n    'Jeux canapé à prendre': { number: number(p['Jeux canapé requis']) },\n    'Serviettes à prendre': { number: number(p['Serviettes']) },\n    'Taies à prendre': { number: number(p['Taies requises']) },\n    'Tapis bain à prendre': { number: number(p['Tapis bain requis']) },\n    'Torchons à prendre': { number: number(p['Torchons requis']) },\n    'Bouteilles eau à installer': { number: number(p['Bouteilles eau requises']) },\n    'Capsules T-disc à installer': { number: number(p['Capsules T-disc requises']) },\n    'Rouleaux WC à installer': { number: number(p['Rouleaux WC prévus']) },\n    'Sacs cuisine à prévoir': { number: number(p['Sacs cuisine prévus']) },\n    'Sacs WC à prévoir': { number: number(p['Sacs WC prévus']) },\n    'Demandes particulières': { rich_text: specialInstructions ? [{ text: { content: specialInstructions } }] : [] },\n    'Arrivée voyageur validée': { rich_text: text(p['Heure arrivée validée']) ? [{ text: { content: text(p['Heure arrivée validée']) } }] : [] },\n    'Contrainte horaire': { rich_text: text(p['Contrainte arrivée']) ? [{ text: { content: text(p['Contrainte arrivée']) } }] : [] },\n    'Passage cave requis': { checkbox: number(p['Jeux chambre requis']) > 0 || number(p['Jeux canapé requis']) > 0 || number(p['Serviettes']) > 0 },\n    'Incident constaté': { checkbox: false },\n    'Photos finales reçues': { checkbox: false },\n    'Contrôle final validé': { checkbox: false },\n    'Steve prévenu': { checkbox: false },\n    'Date dernière mise à jour': { date: { start: new Date().toISOString() } },\n    'ID automatisation': { rich_text: [{ text: { content: `reservation:${reservationId}` } }] }\n  };\n  if (arrival) interventionProperties['Date intervention'] = { date: { start: arrival } };\n  return { json: { reservation_page_id: page.id, reservation_id_compact: reservationId, reservation_title: title(p['Réservation']), intervention_properties: interventionProperties }, pairedItem: { item: 0 } };\n});"
+      },
+      "id": "ca09b0c6-f938-4d06-aae6-6516ef3b442d",
+      "name": "Préparer intervention",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "6b681dfa-abf3-42cf-acee-6171329bec59",
+      "name": "Traiter chaque réservation",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -928,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/71cb042a-8768-4afa-be06-45895e262b0b/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":1,\"filter\":{\"property\":\"Réservation liée\",\"relation\":{\"contains\":\"{{$json.reservation_page_id}}\"}}}",
+        "options": {}
+      },
+      "id": "31816463-251c-43ec-888f-497fd933df44",
+      "name": "Chercher intervention existante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -688,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Traiter chaque réservation').item.json;\nconst existing = $json.results?.[0] ?? null;\nreturn [{ json: { ...source, intervention_exists: !!existing, existing_intervention_page_id: existing?.id ?? null }, pairedItem: { item: 0 } }];"
+      },
+      "id": "57f8d9c9-924f-447e-9f1d-395d9193a574",
+      "name": "Décider si création nécessaire",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "does-not-exist",
+              "leftValue": "={{$json.intervention_exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3bcc57b1-a30c-49a4-bfc6-efb2e35c9245",
+      "name": "Créer l’intervention ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({parent: {data_source_id: '71cb042a-8768-4afa-be06-45895e262b0b'}, properties: $json.intervention_properties}) }}",
+        "options": {}
+      },
+      "id": "5cda7f8b-ddcc-431a-80b6-a80a4acd8d35",
+      "name": "Créer intervention interne",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -256
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { action: 'ignorée', reason: 'Une intervention est déjà liée à cette réservation.', reservation_page_id: $json.reservation_page_id, existing_intervention_page_id: $json.existing_intervention_page_id }, pairedItem: { item: 0 } }];"
+      },
+      "id": "b442142c-bf7a-4050-af71-5e78d1784394",
+      "name": "Ignorer réservation déjà traitée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, action: $json.object === 'page' ? 'créée' : ($json.action ?? 'ignorée'), intervention_page_id: $json.id ?? $json.existing_intervention_page_id ?? null, processed_at: new Date().toISOString() }, pairedItem: { item: 0 } }];"
+      },
+      "id": "e9b05055-29b0-4794-a88c-342cf19c9c5d",
+      "name": "Traitement terminé",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire réservations validées",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire réservations validées": {
+      "main": [
+        [
+          {
+            "node": "Préparer intervention",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer intervention": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque réservation": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Chercher intervention existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher intervention existante": {
+      "main": [
+        [
+          {
+            "node": "Décider si création nécessaire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider si création nécessaire": {
+      "main": [
+        [
+          {
+            "node": "Créer l’intervention ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer l’intervention ?": {
+      "main": [
+        [
+          {
+            "node": "Créer intervention interne",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorer réservation déjà traitée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer intervention interne": {
+      "main": [
+        [
+          {
+            "node": "Traitement terminé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ignorer réservation déjà traitée": {
+      "main": [
+        [
+          {
+            "node": "Traitement terminé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traitement terminé": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque réservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "90a44e8c-0400-427d-b2c0-c3732aac0c83",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "sBROATePwOjnV8I1",
+  "tags": []
+}
