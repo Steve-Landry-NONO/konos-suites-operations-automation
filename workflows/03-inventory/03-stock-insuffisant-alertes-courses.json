@@ -1,0 +1,758 @@
+{
+  "name": "KONOS — Stock insuffisant vers alertes et liste de courses",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "e38ac051-43aa-4f28-bfe2-41fffc4348dd",
+      "name": "Toutes les 6 heures",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2112,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/744bdfd0-4f6d-4240-bb09-cea23c80928d/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":100,\"filter\":{\"property\":\"Actif\",\"checkbox\":{\"equals\":true}}}",
+        "options": {}
+      },
+      "id": "f2f8e990-78e4-4fb4-bb16-181cb6bccea0",
+      "name": "Lire stock consommables",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1920,
+        -96
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/74ffa64d-948f-40ef-a80c-4347120b080d/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":100,\"filter\":{\"property\":\"Actif\",\"checkbox\":{\"equals\":true}}}",
+        "options": {}
+      },
+      "id": "351fe9fb-2bf3-4638-90c8-00f9e6067d22",
+      "name": "Lire stock linge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1920,
+        192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function title(p){return(p?.title??[]).map(x=>x.plain_text??x.text?.content??'').join('')}function num(p){if(!p)return 0;if(typeof p.number==='number')return p.number;if(typeof p.formula?.number==='number')return p.formula.number;if(typeof p.rollup?.number==='number')return p.rollup.number;return 0}function txt(p){return(p?.rich_text??[]).map(x=>x.plain_text??x.text?.content??'').join('')}function sel(p){return p?.select?.name??''}return($json.results??[]).map(page=>{const p=page.properties??{},a=title(p.Article)||page.id,current=num(p['Stock physique calculé'])||num(p['Stock initial']),reserved=num(p['Stock réservé calculé'])||num(p.Réservé),avail=num(p['Stock disponible']),th=num(p['Seuil minimum']),target=num(p['Stock cible'])||th,crit=num(p['Stock critique']),qty=Math.max(0,Math.ceil(target-avail)),price=num(p['Prix unitaire estimé']);return{json:{domain:'Consommable',article:a,article_page_id:page.id,stock_current:current,stock_reserved:reserved,stock_available:avail,threshold:th,target,quantity_to_buy:qty,unit:sel(p.Unité),unit_price:price,budget:qty*price,store:sel(p.Magasin)||txt(p['Fournisseur habituel']),purchase_link:p['Lien achat']?.url??'',priority:avail<=crit||avail<=0?'Critique':'Haute',shortage:avail<=th,automation_id:'stock:consommable:'+page.id.replaceAll('-','')}}})"
+      },
+      "id": "d9509c01-6115-448c-ad07-de43de77dfa0",
+      "name": "Préparer consommables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function title(p){return(p?.title??[]).map(x=>x.plain_text??x.text?.content??'').join('')}function num(p){if(!p)return 0;if(typeof p.number==='number')return p.number;if(typeof p.formula?.number==='number')return p.formula.number;if(typeof p.rollup?.number==='number')return p.rollup.number;return 0}function sel(p){return p?.select?.name??''}return($json.results??[]).map(page=>{const p=page.properties??{},a=title(p['Article linge'])||page.id,current=num(p['Propre physique']),reserved=num(p.Réservé),avail=current-reserved,th=num(p['Seuil propre minimum']),target=num(p['Stock cible'])||th,qty=Math.max(0,Math.ceil(target-avail)),price=num(p['Coût unitaire']);return{json:{domain:'Linge',article:a,article_page_id:page.id,stock_current:current,stock_reserved:reserved,stock_available:avail,threshold:th,target,quantity_to_buy:qty,unit:sel(p.Unité),unit_price:price,budget:qty*price,store:'',purchase_link:'',priority:avail<=0?'Critique':'Haute',shortage:avail<=th,automation_id:'stock:linge:'+page.id.replaceAll('-','')}}})"
+      },
+      "id": "b448561c-1b75-4f75-828e-f9d7f34f6f84",
+      "name": "Préparer linge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        192
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "431af4e6-5a0b-4bd6-8d16-03691d55a394",
+      "name": "Fusionner stocks",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1472,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "5b88bd33-3553-4f79-98b3-2a777bf59a1a",
+      "name": "Traiter chaque article",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1264,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;return[{json:{...x,request_body:JSON.stringify({page_size:1,filter:{property:'ID automatisation',rich_text:{equals:x.automation_id}}})}}];"
+      },
+      "id": "09c2095f-bca3-44c0-bc2c-28d7b5e6bb94",
+      "name": "Préparer recherche alerte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/041a8c85-2df0-4fa2-ae8b-aaa194daba97/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "ef452382-f033-4bb6-a6fb-1acdd19e3b01",
+      "name": "Chercher alerte existante",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -816,
+        64
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Préparer recherche alerte').item.json;const f=($json.results??[])[0];return[{json:{...c,alert_exists:!!f,alert_page_id:f?.id??'',existing_status:f?.properties?.Statut?.select?.name??''}}];"
+      },
+      "id": "49d6236a-3689-4c5d-b0fc-c9f8ed78f169",
+      "name": "Décider action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "Stock insuffisant ?",
+              "leftValue": "={{$json.shortage}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "feeb00f4-733b-429d-b7fe-b4a06f35556c",
+      "name": "Stock insuffisant ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -384,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "Alerte existe ?",
+              "leftValue": "={{$json.alert_exists}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a03a3e3b-e800-4403-98a9-1c5c4af14267",
+      "name": "Alerte existe ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "Alerte à clôturer ?",
+              "leftValue": "={{$json.alert_exists}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cfbd826b-b458-40d1-b12b-9cf76b53830b",
+      "name": "Alerte à clôturer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json,now=new Date().toISOString().slice(0,10),deadline=new Date(Date.now()+(x.priority==='Critique'?24:72)*3600000).toISOString().slice(0,10);const p={\"Alerte\":{title:[{type:'text',text:{content:`${x.priority} — ${x.article}`}}]},\"Domaine\":{select:{name:x.domain}},\"Article\":{rich_text:[{type:'text',text:{content:x.article}}]},\"Stock actuel\":{number:x.stock_current},\"Stock réservé\":{number:x.stock_reserved},\"Stock disponible\":{number:x.stock_available},\"Seuil minimum\":{number:x.threshold},\"Stock cible\":{number:x.target},\"Quantité à acheter\":{number:x.quantity_to_buy},\"Unité\":{rich_text:[{type:'text',text:{content:x.unit||'unité'}}]},\"Prix unitaire estimé\":{number:x.unit_price},\"Budget estimé\":{number:x.budget},\"Magasin\":{rich_text:[{type:'text',text:{content:x.store||''}}]},\"Priorité\":{select:{name:x.priority}},\"Statut\":{select:{name:'À acheter'}},\"Date détection\":{date:{start:now}},\"Date limite\":{date:{start:deadline}},\"Source\":{select:{name:'Stock actuel'}},\"ID automatisation\":{rich_text:[{type:'text',text:{content:x.automation_id}}]},\"Dernier recalcul\":{date:{start:now}},\"Commentaire\":{rich_text:[{type:'text',text:{content:`Stock disponible ${x.stock_available}, seuil ${x.threshold}, cible ${x.target}.`}}]}};if(x.purchase_link)p['Lien achat']={url:x.purchase_link};if(x.domain==='Consommable')p['Article consommable']={relation:[{id:x.article_page_id}]};else p['Article linge']={relation:[{id:x.article_page_id}]};return[{json:{...x,request_body:JSON.stringify({parent:{data_source_id:'041a8c85-2df0-4fa2-ae8b-aaa194daba97'},properties:p})}}];"
+      },
+      "id": "09b62a0d-bd07-45c8-a482-9c09247d10cf",
+      "name": "Préparer création alerte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "ca4ab655-1fb9-4e76-b278-5511a99b9e07",
+      "name": "Créer alerte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        -128
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json,now=new Date().toISOString().slice(0,10),deadline=new Date(Date.now()+(x.priority==='Critique'?24:72)*3600000).toISOString().slice(0,10),status=x.existing_status==='Achat prévu'?'Achat prévu':'À acheter';const p={\"Alerte\":{title:[{type:'text',text:{content:`${x.priority} — ${x.article}`}}]},\"Stock actuel\":{number:x.stock_current},\"Stock réservé\":{number:x.stock_reserved},\"Stock disponible\":{number:x.stock_available},\"Seuil minimum\":{number:x.threshold},\"Stock cible\":{number:x.target},\"Quantité à acheter\":{number:x.quantity_to_buy},\"Prix unitaire estimé\":{number:x.unit_price},\"Budget estimé\":{number:x.budget},\"Priorité\":{select:{name:x.priority}},\"Statut\":{select:{name:status}},\"Date limite\":{date:{start:deadline}},\"Dernier recalcul\":{date:{start:now}},\"Commentaire\":{rich_text:[{type:'text',text:{content:`Alerte recalculée : disponible ${x.stock_available}, seuil ${x.threshold}, cible ${x.target}.`}}]}};return[{json:{...x,request_body:JSON.stringify({properties:p})}}];"
+      },
+      "id": "2ed49dfb-81ee-4598-abfe-40f9cc6bfbae",
+      "name": "Préparer mise à jour alerte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\"+$json.alert_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "e0ffc213-046d-4bc7-a2ac-e9f5c3815fdd",
+      "name": "Mettre à jour alerte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json,now=new Date().toISOString().slice(0,10);return[{json:{...x,request_body:JSON.stringify({properties:{'Stock actuel':{number:x.stock_current},'Stock réservé':{number:x.stock_reserved},'Stock disponible':{number:x.stock_available},'Quantité à acheter':{number:0},'Budget estimé':{number:0},'Statut':{select:{name:'Ignoré'}},'Dernier recalcul':{date:{start:now}},'Commentaire':{rich_text:[{type:'text',text:{content:'Stock redevenu suffisant. Alerte clôturée automatiquement.'}}]}}})}}];"
+      },
+      "id": "b22db7a9-4ba8-4516-bc05-81b790cc8539",
+      "name": "Préparer clôture alerte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{\"https://api.notion.com/v1/pages/\"+$json.alert_page_id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{$json.request_body}}",
+        "options": {}
+      },
+      "id": "835ce7ca-ac17-4f09-94cc-e991dcecd134",
+      "name": "Clôturer alerte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        176
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{done:true}}];"
+      },
+      "id": "1b8f4a59-9514-4fbb-ad3c-a2d96403887a",
+      "name": "Article traité",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        64
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 6 heures": {
+      "main": [
+        [
+          {
+            "node": "Lire stock consommables",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lire stock linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire stock consommables": {
+      "main": [
+        [
+          {
+            "node": "Préparer consommables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire stock linge": {
+      "main": [
+        [
+          {
+            "node": "Préparer linge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer consommables": {
+      "main": [
+        [
+          {
+            "node": "Fusionner stocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer linge": {
+      "main": [
+        [
+          {
+            "node": "Fusionner stocks",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fusionner stocks": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque article": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Préparer recherche alerte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer recherche alerte": {
+      "main": [
+        [
+          {
+            "node": "Chercher alerte existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher alerte existante": {
+      "main": [
+        [
+          {
+            "node": "Décider action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider action": {
+      "main": [
+        [
+          {
+            "node": "Stock insuffisant ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stock insuffisant ?": {
+      "main": [
+        [
+          {
+            "node": "Alerte existe ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alerte à clôturer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerte existe ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer mise à jour alerte",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Préparer création alerte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer création alerte": {
+      "main": [
+        [
+          {
+            "node": "Créer alerte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer alerte": {
+      "main": [
+        [
+          {
+            "node": "Article traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer mise à jour alerte": {
+      "main": [
+        [
+          {
+            "node": "Mettre à jour alerte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre à jour alerte": {
+      "main": [
+        [
+          {
+            "node": "Article traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerte à clôturer ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer clôture alerte",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Article traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer clôture alerte": {
+      "main": [
+        [
+          {
+            "node": "Clôturer alerte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clôturer alerte": {
+      "main": [
+        [
+          {
+            "node": "Article traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Article traité": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ed7ac87b-4856-4d08-b4d1-fe0224cb2b3c",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "tlAsn0vARb9qtwu9",
+  "tags": []
+}

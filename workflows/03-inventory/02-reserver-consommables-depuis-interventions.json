@@ -1,0 +1,504 @@
+{
+  "name": "KONOS — Réserver les consommables depuis les interventions",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "4f1f91ee-f49c-4066-92b5-1b9f95f70447",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1728,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/71cb042a-8768-4afa-be06-45895e262b0b/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\"page_size\":100,\"filter\":{\"and\":[{\"property\":\"Validation réservation\",\"checkbox\":{\"equals\":true}},{\"property\":\"Statut\",\"select\":{\"does_not_equal\":\"Annulée\"}},{\"property\":\"Statut\",\"select\":{\"does_not_equal\":\"Terminée\"}}]}}",
+        "options": {}
+      },
+      "id": "d22129ff-207a-4ebc-9280-38cbe7ce9c33",
+      "name": "Lire interventions actives",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function title(p){return p?.title?.map(x=>x.plain_text??x.text?.content??'').join('')??'';}\nfunction num(p){return p?.number??0;}\nfunction dateStart(p){return p?.date?.start??new Date().toISOString().slice(0,10);}\nconst mappings=[[\"Bouteilles eau à installer\", \"Bouteille d’eau 50 cl\", \"eau-50cl\"], [\"Capsules T-disc à installer\", \"Capsules de café\", \"capsules-cafe\"], [\"Rouleaux WC à installer\", \"Papier toilette\", \"papier-toilette\"], [\"Sacs cuisine à prévoir\", \"Sacs-poubelle cuisine\", \"sacs-cuisine\"], [\"Sacs WC à prévoir\", \"Sacs-poubelle WC\", \"sacs-wc\"]];\nconst out=[];\nfor(const page of ($json.results??[])){const p=page.properties;const compact=page.id.replaceAll('-','');const iname=title(p['Intervention'])||page.id;for(const [field,article,slug] of mappings){const q=num(p[field]);if(q<=0)continue;out.push({json:{intervention_page_id:page.id,intervention_name:iname,date_mouvement:dateStart(p['Date intervention']),article_name:article,quantity:q,automation_id:'consommables-reservation:'+compact+':'+slug},pairedItem:{item:0}});}}\nreturn out;"
+      },
+      "id": "cbea545f-f351-4f65-9bb0-805266794bce",
+      "name": "Préparer les besoins",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "925c4c64-79b8-4e82-86f0-3077273fec68",
+      "name": "Traiter chaque besoin",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1088,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/744bdfd0-4f6d-4240-bb09-cea23c80928d/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"Article\",\n    title: {\n      equals: $json.article_name\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "cc294c75-d1c5-4bb5-8346-c8ecaa412a5b",
+      "name": "Chercher article",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$('Traiter chaque besoin').item.json; const a=$json.results?.[0]??null; return [{json:{...s,article_found:!!a,article_page_id:a?.id??null},pairedItem:{item:0}}];"
+      },
+      "id": "4c8d5172-aa28-4323-a1a8-4c34c4fdb9b7",
+      "name": "Valider article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{$json.article_found}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "95fffd94-04f6-4038-a201-0bf89e64229c",
+      "name": "Article trouvé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -432,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/data_sources/bc358e38-869f-461c-8242-8709d2bfe985/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  page_size: 1,\n  filter: {\n    property: \"ID automatisation\",\n    rich_text: {\n      equals: $json.automation_id\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "c8812626-a2b6-4d80-a636-13866a747dc2",
+      "name": "Chercher mouvement existant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -208,
+        -48
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$('Article trouvé ?').item.json; const e=$json.results?.[0]??null; return [{json:{...s,movement_exists:!!e},pairedItem:{item:0}}];"
+      },
+      "id": "73be2956-4968-4599-bf77-b0eb6c16a290",
+      "name": "Décider création",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{$json.movement_exists}}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ee620037-5598-4232-872a-6b87fba20efb",
+      "name": "Créer le mouvement ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  parent: {\n    data_source_id: \"bc358e38-869f-461c-8242-8709d2bfe985\"\n  },\n  properties: {\n    \"Mouvement\": {\n      title: [\n        {\n          text: {\n            content:\n              \"Réservation — \" +\n              $json.article_name +\n              \" — \" +\n              $json.intervention_name\n          }\n        }\n      ]\n    },\n    \"Date mouvement\": {\n      date: {\n        start: $json.date_mouvement\n      }\n    },\n    \"Type mouvement\": {\n      select: {\n        name: \"Réservation prévisionnelle\"\n      }\n    },\n    \"Quantité\": {\n      number: $json.quantity\n    },\n    \"Article\": {\n      relation: [\n        {\n          id: $json.article_page_id\n        }\n      ]\n    },\n    \"Intervention liée\": {\n      relation: [\n        {\n          id: $json.intervention_page_id\n        }\n      ]\n    },\n    \"Statut\": {\n      select: {\n        name: \"Prévisionnel\"\n      }\n    },\n    \"Créé par\": {\n      select: {\n        name: \"n8n\"\n      }\n    },\n    \"ID automatisation\": {\n      rich_text: [\n        {\n          text: {\n            content: $json.automation_id\n          }\n        }\n      ]\n    },\n    \"Commentaire\": {\n      rich_text: [\n        {\n          text: {\n            content:\n              \"Réservation prévisionnelle générée depuis l’intervention.\"\n          }\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "c581c745-4dd4-44f6-b18b-ca3b2263fc7e",
+      "name": "Créer mouvement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nEXSVkeOTN9rwZBZ",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:true},pairedItem:{item:0}}];"
+      },
+      "id": "e060bf36-768f-4183-a4f7-f52fb4f134b9",
+      "name": "Besoin traité",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{success:false,reason:'Article introuvable',article_name:$json.article_name},pairedItem:{item:0}}];"
+      },
+      "id": "86476991-e8f9-4231-84a0-a47a0abba595",
+      "name": "Article introuvable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [
+          {
+            "node": "Lire interventions actives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire interventions actives": {
+      "main": [
+        [
+          {
+            "node": "Préparer les besoins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les besoins": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque besoin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traiter chaque besoin": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Chercher article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher article": {
+      "main": [
+        [
+          {
+            "node": "Valider article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valider article": {
+      "main": [
+        [
+          {
+            "node": "Article trouvé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Article trouvé ?": {
+      "main": [
+        [
+          {
+            "node": "Chercher mouvement existant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Article introuvable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher mouvement existant": {
+      "main": [
+        [
+          {
+            "node": "Décider création",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Décider création": {
+      "main": [
+        [
+          {
+            "node": "Créer le mouvement ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer le mouvement ?": {
+      "main": [
+        [
+          {
+            "node": "Créer mouvement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Besoin traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer mouvement": {
+      "main": [
+        [
+          {
+            "node": "Besoin traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Article introuvable": {
+      "main": [
+        [
+          {
+            "node": "Besoin traité",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Besoin traité": {
+      "main": [
+        [
+          {
+            "node": "Traiter chaque besoin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "8f15b06b-a69b-4ad1-bcec-a8737493b7f9",
+  "meta": {
+    "instanceId": "140090d298e18b0a41ccd61d78acee90d65ac62c97bfd6befca8d67b31d9d2fe"
+  },
+  "nodeGroups": [],
+  "id": "Uo57YTcuLgecKj4W",
+  "tags": []
+}
