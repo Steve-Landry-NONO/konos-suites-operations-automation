@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { ChangeEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FieldTask, TaskStatus } from "../../lib/notion";
 
@@ -29,6 +29,8 @@ export default function TaskChecklist({
   const [tasks, setTasks] = useState(initialTasks);
   const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  const [photoBusyTaskId, setPhotoBusyTaskId] = useState<string | null>(null);
+  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>(
     Object.fromEntries(initialTasks.map((task) => [task.id, task.comment])),
   );
@@ -61,6 +63,66 @@ export default function TaskChecklist({
     [tasks],
   );
 
+  async function uploadPhoto(
+    task: FieldTask,
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setError("");
+    setSuccess("");
+
+    if (!file.type.startsWith("image/")) {
+      setError("Le fichier sélectionné doit être une image.");
+      return;
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      setError("La photo dépasse la limite de 20 Mo.");
+      return;
+    }
+
+    setPhotoBusyTaskId(task.id);
+
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+
+      const response = await fetch(`/api/tasks/${task.id}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Envoi de photo impossible.");
+      }
+
+      setPhotoCounts((current) => ({
+        ...current,
+        [task.id]: payload.photoCount ?? 1,
+      }));
+
+      setSuccess(
+        `Photo « ${payload.filename} » enregistrée dans Notion.`,
+      );
+
+      router.refresh();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Envoi de photo impossible.",
+      );
+    } finally {
+      setPhotoBusyTaskId(null);
+    }
+  }
+
   async function updateTask(task: FieldTask, status: TaskStatus) {
     setError("");
     setSuccess("");
@@ -70,6 +132,17 @@ export default function TaskChecklist({
     if (status === "Problème" && comment.trim().length < 5) {
       setError(
         "Ajoutez un commentaire d’au moins 5 caractères avant de signaler un problème.",
+      );
+      return;
+    }
+
+    if (
+      status === "Fait" &&
+      task.photoRequired &&
+      !photoCounts[task.id]
+    ) {
+      setError(
+        "Une photo est obligatoire avant de terminer cette tâche pendant cette session.",
       );
       return;
     }
@@ -157,6 +230,7 @@ export default function TaskChecklist({
         {tasks.map((task, index) => {
           const isOpen = openedTaskId === task.id;
           const isBusy = busyTaskId === task.id;
+          const isPhotoBusy = photoBusyTaskId === task.id;
           const isMissionComplete =
             task.automationId.split(":").at(-1) === "mission-complete";
           const missionBlocked =
@@ -188,6 +262,9 @@ export default function TaskChecklist({
                   <span className="task-meta">
                     {task.required && <span>Obligatoire</span>}
                     {task.photoRequired && <span>Photo requise</span>}
+                    {photoCounts[task.id] > 0 && (
+                      <span>{photoCounts[task.id]} photo</span>
+                    )}
                     <span>{task.status}</span>
                   </span>
                 </span>
@@ -231,6 +308,23 @@ export default function TaskChecklist({
                     />
                   </label>
 
+                  <label className="photo-upload">
+                    <span>
+                      {isPhotoBusy
+                        ? "Envoi de la photo…"
+                        : task.photoRequired
+                          ? "Ajouter la photo obligatoire"
+                          : "Ajouter une photo"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      disabled={isPhotoBusy}
+                      onChange={(event) => uploadPhoto(task, event)}
+                    />
+                  </label>
+
                   {missionBlocked && (
                     <p className="blocking-message">
                       Clôture bloquée : {blockingRequiredTasks.length} tâche(s)
@@ -245,6 +339,7 @@ export default function TaskChecklist({
                         type="button"
                         disabled={
                           isBusy ||
+                          isPhotoBusy ||
                           (missionBlocked && status === "Fait")
                         }
                         className={

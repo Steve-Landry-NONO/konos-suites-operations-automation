@@ -381,3 +381,32 @@ body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe 
   border-color: #fda29b;
   color: #b42318;
 }
+.photo-upload {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px dashed #98a2b3;
+  border-radius: 12px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.photo-upload span {
+  font-weight: 700;
+  color: #344054;
+}
+
+.photo-upload input[type="file"] {
+  width: 100%;
+  font-size: 0.82rem;
+}
+
+.photo-upload input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 8px 10px;
+  border: 1px solid #c7d7fe;
+  border-radius: 8px;
+  background: white;
+  color: #3538cd;
+  cursor: pointer;
+}
