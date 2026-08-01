@@ -4,6 +4,7 @@ import {
   TaskStatus,
   updateFieldTask,
 } from "../../../../lib/notion";
+import { notifyIncidentProblem } from "../../../../lib/incident-notifications";
 
 export const runtime = "nodejs";
 
@@ -57,17 +58,39 @@ export async function PATCH(
       completedBy,
     });
 
+    let notificationSent = false;
+    let notificationError = "";
+
+    if (body.status === "Problème") {
+      try {
+        await notifyIncidentProblem(taskId);
+        notificationSent = true;
+      } catch (notificationFailure) {
+        notificationError =
+          notificationFailure instanceof Error
+            ? notificationFailure.message
+            : "Erreur inconnue pendant lâ€™envoi de lâ€™alerte n8n.";
+
+        console.error(
+          "Incident enregistrÃ©, mais alerte n8n non envoyÃ©e :",
+          notificationFailure,
+        );
+      }
+    }
+
     return NextResponse.json({
       task,
       incidentCreated: body.status === "Problème",
+      notificationSent,
+      notificationError,
     });
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
-        : "Erreur inconnue pendant la mise à jour.";
+        : "Erreur inconnue pendant la mise Ã  jour.";
 
-    console.error("Mise à jour de tâche impossible :", error);
+    console.error("Mise Ã  jour de tÃ¢che impossible :", error);
 
     return NextResponse.json(
       { error: message },
@@ -75,3 +98,4 @@ export async function PATCH(
     );
   }
 }
+
