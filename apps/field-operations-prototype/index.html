@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>KONOS SUITES — Mission terrain</title>
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+      --primary:#111827; --accent:#2563eb; --ok:#16a34a; --warn:#f59e0b; --danger:#dc2626;
+      --radius:22px; --shadow:0 12px 30px rgba(17,24,39,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#eef2ff 0,#f8fafc 30%,#f5f7fb 100%);color:var(--ink);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input,textarea{font:inherit}
+    .shell{max-width:430px;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;padding-bottom:104px}
+    header{padding:20px 18px 14px;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--line)}
+    .brand{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .logo{width:46px;height:46px;border-radius:16px;background:#111827;color:white;display:grid;place-items:center;font-weight:800}
+    h1{font-size:18px;margin:0}.sub{font-size:13px;color:var(--muted);margin-top:3px}
+    main{padding:16px}.screen{display:none}.screen.active{display:block}
+    .card{background:var(--card);border:1px solid rgba(229,231,235,.8);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:14px}
+    .hero{background:linear-gradient(135deg,#111827,#1f2937);color:white}.hero .sub{color:#d1d5db}
+    .pill{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border-radius:999px;font-size:12px;font-weight:700;background:#e0e7ff;color:#3730a3}
+    .pill.ok{background:#dcfce7;color:#166534}.pill.warn{background:#fef3c7;color:#92400e}.pill.danger{background:#fee2e2;color:#991b1b}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{padding:14px;border:1px solid var(--line);border-radius:17px;background:#fafafa}
+    .stat strong{display:block;font-size:20px}.stat span{font-size:12px;color:var(--muted)}
+    .btn{width:100%;border:0;border-radius:17px;padding:15px 16px;font-weight:800;cursor:pointer;margin-top:10px}
+    .btn.primary{background:var(--primary);color:white}.btn.secondary{background:#eef2ff;color:#3730a3}.btn.danger{background:#fee2e2;color:#991b1b}
+    .progress-wrap{height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden}.progress{height:100%;background:linear-gradient(90deg,#2563eb,#22c55e);width:0;transition:.25s}
+    .section-title{display:flex;justify-content:space-between;align-items:center;margin:18px 2px 10px}.section-title h2{font-size:16px;margin:0}
+    .task{background:white;border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:10px;transition:.2s}
+    .task.done{border-color:#86efac;background:#f0fdf4}.task.problem{border-color:#fecaca;background:#fef2f2}
+    .task-top{display:flex;gap:12px;align-items:flex-start}.task-index{width:32px;height:32px;border-radius:12px;background:#eef2ff;color:#3730a3;display:grid;place-items:center;font-weight:800;flex:0 0 auto}
+    .task h3{font-size:15px;margin:1px 0 5px}.task p{font-size:13px;color:var(--muted);margin:0;line-height:1.45}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.mini{border:0;border-radius:13px;padding:11px;font-weight:800;cursor:pointer}
+    .mini.done{background:#dcfce7;color:#166534}.mini.problem{background:#fee2e2;color:#991b1b}
+    .notice{padding:13px;border-radius:16px;background:#fff7ed;color:#9a3412;font-size:13px;margin-top:10px}
+    label{display:block;font-size:13px;font-weight:700;margin:12px 0 6px}.input{width:100%;padding:13px;border:1px solid var(--line);border-radius:14px;background:white}
+    textarea.input{min-height:100px;resize:vertical}
+    .bottom{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(430px,100%);padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);gap:8px;z-index:20}
+    .nav{border:0;background:transparent;padding:10px 5px;border-radius:13px;font-size:12px;color:var(--muted);font-weight:700}.nav.active{background:#eef2ff;color:#3730a3}
+    .checklist-lock{opacity:.55;pointer-events:none}.success{text-align:center;padding:34px 10px}.success .big{font-size:64px}
+    .photo-box{border:2px dashed #cbd5e1;border-radius:18px;padding:24px;text-align:center;color:var(--muted);background:#f8fafc}
+    .row{display:flex;justify-content:space-between;gap:14px;align-items:center}.small{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand">
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="logo">KS</div>
+        <div><h1>KONOS SUITES</h1><div class="sub">Mission terrain · Prototype MVP</div></div>
+      </div>
+      <span id="statusPill" class="pill">À commencer</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="home" class="screen active">
+      <div class="card hero">
+        <div class="sub">ROTATION DU 1 AOÛT 2026</div>
+        <h2 style="margin:8px 0 6px;font-size:25px">Préparer l’appartement</h2>
+        <div class="sub">4 voyageurs · arrivée prévue aujourd’hui</div>
+        <button class="btn secondary" onclick="startMission()">Commencer l’intervention</button>
+      </div>
+      <div class="card">
+        <div class="row"><strong>Mission</strong><span class="pill warn">Priorité normale</span></div>
+        <div class="grid" style="margin-top:14px">
+          <div class="stat"><strong>4</strong><span>voyageurs</span></div>
+          <div class="stat"><strong>2</strong><span>couchages</span></div>
+          <div class="stat"><strong>4</strong><span>serviettes</span></div>
+          <div class="stat"><strong>4</strong><span>bouteilles d’eau</span></div>
+        </div>
+        <div class="notice"><strong>Demande particulière :</strong> préparer le lit principal et le canapé-lit.</div>
+      </div>
+      <div class="card">
+        <strong>À prendre dans la cave</strong>
+        <p class="sub">1 jeu chambre · 1 jeu canapé · 4 taies · 1 tapis · 1 torchon · 4 capsules T-disc</p>
+      </div>
+    </section>
+
+    <section id="tasks" class="screen">
+      <div class="card">
+        <div class="row"><strong>Progression</strong><span id="progressText" class="small">0 / 16</span></div>
+        <div class="progress-wrap" style="margin-top:10px"><div id="progressBar" class="progress"></div></div>
+      </div>
+      <div id="taskList"></div>
+    </section>
+
+    <section id="final" class="screen">
+      <div class="card">
+        <strong>Contrôle final</strong>
+        <p class="sub">Toutes les tâches obligatoires doivent être terminées avant la clôture.</p>
+        <div id="remainingBox" class="notice">16 tâches obligatoires restantes.</div>
+      </div>
+      <div class="card">
+        <strong>Photos finales</strong>
+        <div class="photo-box" style="margin-top:12px">
+          📷<br><strong>Ajouter les 5 photos</strong><br>
+          <span class="small">Chambre · Salon · Cuisine · Salle de bain · Vue générale</span>
+          <input id="photos" type="file" accept="image/*" multiple class="input" style="margin-top:12px">
+        </div>
+      </div>
+      <div class="card">
+        <label for="report">Compte rendu</label>
+        <textarea id="report" class="input" placeholder="Observations, manque de stock, temps supplémentaire…"></textarea>
+        <button id="completeBtn" class="btn primary checklist-lock" onclick="completeMission()">Terminer l’intervention</button>
+      </div>
+    </section>
+
+    <section id="incident" class="screen">
+      <div class="card">
+        <strong>Signaler un problème</strong>
+        <label>Catégorie</label>
+        <select id="incidentType" class="input">
+          <option>Accès</option><option>Linge</option><option>Ménage</option><option>Équipement</option><option>Casse</option><option>Stock</option><option>Autre</option>
+        </select>
+        <label>Gravité</label>
+        <select id="incidentLevel" class="input">
+          <option>Information</option><option>Gênant</option><option>Bloquant</option><option>Danger</option>
+        </select>
+        <label>Description</label>
+        <textarea id="incidentText" class="input" placeholder="Décrivez ce qui se passe"></textarea>
+        <label>Photo</label>
+        <input type="file" accept="image/*" class="input">
+        <button class="btn danger" onclick="sendIncident()">Envoyer le signalement</button>
+      </div>
+    </section>
+
+    <section id="done" class="screen">
+      <div class="card success">
+        <div class="big">✅</div>
+        <h2>Mission terminée</h2>
+        <p class="sub">L’appartement a été déclaré prêt et Steve a été informé.</p>
+        <div class="notice">Dernière vérification : boîte à clés repositionnée, porte fermée, chiffres mélangés.</div>
+        <button class="btn secondary" onclick="resetPrototype()">Réinitialiser le prototype</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom">
+    <button class="nav active" data-target="home" onclick="go('home',this)">Mission</button>
+    <button class="nav" data-target="tasks" onclick="go('tasks',this)">Checklist</button>
+    <button class="nav" data-target="final" onclick="go('final',this)">Finaliser</button>
+  </nav>
+</div>
+
+<script>
+const sections = [
+ ["Accès et cave",[
+  ["Vérifier la boîte à clés","Vérifier qu’elle est présente et contient les clés."],
+  ["Récupérer le linge et les consommables","Prendre 1 jeu chambre, 1 jeu canapé, 4 serviettes, 4 taies, 1 tapis et 1 torchon."]
+ ]],
+ ["Constat initial",[
+  ["Aérer et faire le constat initial","Ouvrir les fenêtres et photographier toute anomalie avant nettoyage."]
+ ]],
+ ["Chambre",[
+  ["Préparer le lit principal","Installer un jeu complet propre avec deux taies."],
+  ["Nettoyer et valider la chambre","Poussière, surfaces, dessous du lit, placards et sol."]
+ ]],
+ ["Salon",[
+  ["Préparer le canapé-lit","Installer un jeu complet propre avec deux taies."],
+  ["Nettoyer et valider le salon","Coussins, surfaces, télécommandes et sol."]
+ ]],
+ ["Cuisine",[
+  ["Nettoyer et valider la cuisine","Vaisselle, évier, plan, plaque, appareils, réfrigérateur et poubelle."],
+  ["Installer les goodies","4 bouteilles d’eau, 4 capsules T-disc et 1 torchon."]
+ ]],
+ ["Salle de bain",[
+  ["Nettoyer la salle de bain","Douche, lavabo, miroir, robinetterie et évacuation."],
+  ["Installer serviettes et tapis","4 serviettes et 1 tapis de bain."]
+ ]],
+ ["WC et entrée",[
+  ["Nettoyer les WC et l’entrée","Désinfecter, remettre sacs et papier, puis nettoyer l’entrée."]
+ ]],
+ ["Contrôle final",[
+  ["Contrôler chaudière et équipements","Vérifier eau chaude, éclairage, appareils et robinets."],
+  ["Fermer fenêtres et positionner les volets","Respecter la procédure de fermeture."],
+  ["Prendre les photos finales","Chambre, salon, cuisine, salle de bain et vue générale."],
+  ["Repositionner la boîte à clés","Vérifier les clés, fermer et mélanger les chiffres."]
+ ]]
+];
+const flat = sections.flatMap(s=>s[1]);
+let state = JSON.parse(localStorage.getItem("ks-prototype")||"null") || {started:false,statuses:{},incident:false,done:false};
+
+function save(){localStorage.setItem("ks-prototype",JSON.stringify(state))}
+function go(id,btn){
+ document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+ document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));
+ if(btn) btn.classList.add("active");
+}
+function startMission(){
+ state.started=true;save();document.getElementById("statusPill").textContent="En cours";
+ document.getElementById("statusPill").className="pill warn";renderTasks();go("tasks",document.querySelector('[data-target="tasks"]'));
+}
+function renderTasks(){
+ const root=document.getElementById("taskList");root.innerHTML="";let idx=0;
+ sections.forEach(([name,tasks])=>{
+  const title=document.createElement("div");title.className="section-title";title.innerHTML=`<h2>${name}</h2><span class="small">${tasks.length} tâche(s)</span>`;root.appendChild(title);
+  tasks.forEach(([label,desc])=>{
+   const key=String(idx), st=state.statuses[key]||"todo";
+   const el=document.createElement("div");el.className="task "+(st==="done"?"done":st==="problem"?"problem":"");
+   el.innerHTML=`<div class="task-top"><div class="task-index">${idx+1}</div><div><h3>${label}</h3><p>${desc}</p></div></div>
+    <div class="actions"><button class="mini done" onclick="setTask('${key}','done')">✓ Fait</button><button class="mini problem" onclick="setTask('${key}','problem')">! Problème</button></div>`;
+   root.appendChild(el); idx++;
+  });
+ });
+ updateProgress();
+}
+function setTask(key,status){
+ state.statuses[key]=status;save();renderTasks();
+ if(status==="problem"){state.incident=true;save();go("incident",null)}
+}
+function updateProgress(){
+ const done=Object.values(state.statuses).filter(v=>v==="done").length;
+ const pct=Math.round(done/flat.length*100);
+ document.getElementById("progressBar").style.width=pct+"%";
+ document.getElementById("progressText").textContent=`${done} / ${flat.length}`;
+ document.getElementById("remainingBox").textContent= done===flat.length ? "Toutes les tâches obligatoires sont terminées." : `${flat.length-done} tâche(s) obligatoire(s) restante(s).`;
+ const btn=document.getElementById("completeBtn");
+ btn.classList.toggle("checklist-lock",done!==flat.length);
+}
+function sendIncident(){
+ const txt=document.getElementById("incidentText").value.trim();
+ alert(txt ? "Signalement enregistré dans le prototype." : "Ajoutez une courte description.");
+ if(txt){go("tasks",document.querySelector('[data-target="tasks"]'))}
+}
+function completeMission(){
+ const files=document.getElementById("photos").files;
+ if(files.length<1){alert("Ajoutez au moins une photo pour tester la clôture.");return}
+ state.done=true;save();document.getElementById("statusPill").textContent="Terminée";document.getElementById("statusPill").className="pill ok";
+ document.querySelector(".bottom").style.display="none";go("done",null);
+}
+function resetPrototype(){localStorage.removeItem("ks-prototype");location.reload()}
+renderTasks();
+if(state.started){document.getElementById("statusPill").textContent="En cours";document.getElementById("statusPill").className="pill warn"}
+if(state.done){document.querySelector(".bottom").style.display="none";go("done",null)}
+</script>
+</body>
+</html>
