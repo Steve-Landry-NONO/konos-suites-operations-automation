@@ -11,3 +11,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Next.js
+node_modules/
+.next/
+out/
+
