@@ -1,50 +1,125 @@
-const demoTasks = [
-  ["Accès et cave", "Récupérer le linge propre à la cave"],
-  ["Constat initial", "Faire le constat initial du logement"],
-  ["Chambre", "Préparer le lit de la chambre"],
-  ["Salon", "Préparer le canapé-lit"],
-  ["Cuisine", "Installer les consommables cuisine"],
-  ["Salle de bain", "Préparer les serviettes et le tapis de bain"],
-  ["WC et entrée", "Installer les consommables WC"],
-  ["Contrôle final", "Vérifier les clés et la boîte à clés"],
-  ["Contrôle final", "Contrôler chaque pièce avant clôture"],
-  ["Contrôle final", "Confirmer la fin de mission"],
-] as const;
+import { loadFieldIntervention } from "../lib/notion";
 
-export default function HomePage() {
-  return (
-    <main className="shell">
-      <header className="header">
-        <div className="logo">KS</div>
-        <div>
-          <h1>KONOS SUITES</h1>
-          <p>Mission terrain · socle Next.js</p>
-        </div>
-      </header>
+export const dynamic = "force-dynamic";
 
-      <section className="hero">
-        <span className="pill">TEST-TC11-002</span>
-        <h2>Préparer l’appartement</h2>
-        <p>3 voyageurs · lit principal + canapé-lit</p>
-      </section>
+function beddingLabel(bedroomBed: boolean, sofaBed: boolean): string {
+  if (bedroomBed && sofaBed) {
+    return "lit principal + canapé-lit";
+  }
 
-      <section className="card">
-        <div className="row"><strong>Checklist MVP-1.0</strong><span>0 / 10</span></div>
-        <div className="progress"><div /></div>
-      </section>
+  if (sofaBed) {
+    return "canapé-lit";
+  }
 
-      <section>
-        {demoTasks.map(([section, task], index) => (
-          <article className="task" key={task}>
-            <span className="index">{index + 1}</span>
-            <div>
-              <small>{section}</small>
-              <h3>{task}</h3>
-              <p>Donnée de démonstration. La prochaine étape remplacera cette liste par les tâches lues dans Notion.</p>
-            </div>
-          </article>
-        ))}
-      </section>
-    </main>
-  );
+  if (bedroomBed) {
+    return "lit principal";
+  }
+
+  return "couchage à confirmer";
+}
+
+export default async function HomePage() {
+  try {
+    const intervention = await loadFieldIntervention();
+    const completedTasks = intervention.tasks.filter(
+      (task) => task.status === "Fait",
+    ).length;
+
+    const progress =
+      intervention.tasks.length > 0
+        ? Math.round((completedTasks / intervention.tasks.length) * 100)
+        : 0;
+
+    return (
+      <main className="shell">
+        <header className="header">
+          <div className="logo">KS</div>
+          <div>
+            <h1>KONOS SUITES</h1>
+            <p>Mission terrain · données Notion</p>
+          </div>
+        </header>
+
+        <section className="hero">
+          <span className="pill">
+            {intervention.automationId || "INTERVENTION"}
+          </span>
+          <h2>Préparer l’appartement</h2>
+          <p>
+            {intervention.travelers} voyageur
+            {intervention.travelers > 1 ? "s" : ""} ·{" "}
+            {beddingLabel(intervention.bedroomBed, intervention.sofaBed)}
+          </p>
+        </section>
+
+        <section className="card">
+          <div className="row">
+            <strong>
+              Checklist {intervention.checklistVersion || "MVP-1.0"}
+            </strong>
+            <span>
+              {completedTasks} / {intervention.tasks.length}
+            </span>
+          </div>
+          <div className="progress">
+            <div style={{ width: `${progress}%` }} />
+          </div>
+        </section>
+
+        {intervention.tasks.length === 0 ? (
+          <section className="card">
+            <strong>Aucune tâche trouvée</strong>
+            <p>
+              Vérifiez le partage des bases Notion et la relation Intervention.
+            </p>
+          </section>
+        ) : (
+          <section>
+            {intervention.tasks.map((task, index) => (
+              <article className="task" key={task.id}>
+                <span className="index">{index + 1}</span>
+                <div>
+                  <small>{task.section || "Sans section"}</small>
+                  <h3>{task.title || "Tâche sans titre"}</h3>
+                  <p>{task.instruction || "Aucune instruction."}</p>
+
+                  <div className="task-meta">
+                    {task.required && <span>Obligatoire</span>}
+                    {task.photoRequired && <span>Photo requise</span>}
+                    {task.status && <span>{task.status}</span>}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+      </main>
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Erreur Notion inconnue.";
+
+    console.error("Chargement Notion impossible :", error);
+
+    return (
+      <main className="shell">
+        <header className="header">
+          <div className="logo">KS</div>
+          <div>
+            <h1>KONOS SUITES</h1>
+            <p>Mission terrain · connexion Notion</p>
+          </div>
+        </header>
+
+        <section className="card error-card">
+          <strong>Connexion Notion impossible</strong>
+          <p>{message}</p>
+          <p>
+            Vérifiez le token, les deux identifiants de data source et les
+            autorisations de l’intégration Notion, puis redémarrez le serveur.
+          </p>
+        </section>
+      </main>
+    );
+  }
 }

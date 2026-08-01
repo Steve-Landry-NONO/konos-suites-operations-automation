@@ -20,3 +20,29 @@ body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe 
 .task small { color:#4f46e5; font-weight:700; }
 .task h3 { margin:4px 0 5px; font-size:15px; }
 .task p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.task-meta span {
+  border: 1px solid #d9def0;
+  border-radius: 999px;
+  color: #344054;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+}
+
+.error-card {
+  border: 1px solid #f1b8b8;
+}
+
+.error-card strong {
+  color: #9b1c1c;
+}
+
+.error-card p {
+  overflow-wrap: anywhere;
+}

@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15",
+    "@notionhq/client": "^5.23.3",
     "next": "^15.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
