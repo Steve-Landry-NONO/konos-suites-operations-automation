@@ -33,15 +33,34 @@ export async function PATCH(
       );
     }
 
+    const comment =
+      typeof body.comment === "string" ? body.comment : "";
+    const completedBy =
+      typeof body.completedBy === "string" ? body.completedBy : "";
+
+    if (
+      body.status === "Problème" &&
+      comment.trim().length < 5
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Un commentaire d’au moins 5 caractères est obligatoire pour signaler un problème.",
+        },
+        { status: 400 },
+      );
+    }
+
     const task = await updateFieldTask(taskId, {
       status: body.status,
-      comment:
-        typeof body.comment === "string" ? body.comment : "",
-      completedBy:
-        typeof body.completedBy === "string" ? body.completedBy : "",
+      comment,
+      completedBy,
     });
 
-    return NextResponse.json({ task });
+    return NextResponse.json({
+      task,
+      incidentCreated: body.status === "Problème",
+    });
   } catch (error) {
     const message =
       error instanceof Error

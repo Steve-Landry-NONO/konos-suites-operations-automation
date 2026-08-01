@@ -2,10 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  FieldTask,
-  TaskStatus,
-} from "../../lib/notion";
+import type { FieldTask, TaskStatus } from "../../lib/notion";
 
 type Props = {
   initialTasks: FieldTask[];
@@ -41,6 +38,7 @@ export default function TaskChecklist({
     ),
   );
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const completedCount = useMemo(
     () => tasks.filter((task) => isDone(task.status)).length,
@@ -65,6 +63,17 @@ export default function TaskChecklist({
 
   async function updateTask(task: FieldTask, status: TaskStatus) {
     setError("");
+    setSuccess("");
+
+    const comment = comments[task.id] ?? "";
+
+    if (status === "Problème" && comment.trim().length < 5) {
+      setError(
+        "Ajoutez un commentaire d’au moins 5 caractères avant de signaler un problème.",
+      );
+      return;
+    }
+
     setBusyTaskId(task.id);
 
     try {
@@ -75,7 +84,7 @@ export default function TaskChecklist({
         },
         body: JSON.stringify({
           status,
-          comment: comments[task.id] ?? "",
+          comment,
           completedBy: completedBy[task.id] ?? "",
         }),
       });
@@ -91,6 +100,14 @@ export default function TaskChecklist({
           item.id === task.id ? payload.task : item,
         ),
       );
+
+      if (status === "Problème") {
+        setSuccess(
+          "Problème enregistré et incident signalé sur l’intervention.",
+        );
+      } else {
+        setSuccess("Tâche mise à jour dans Notion.");
+      }
 
       if (status === "Fait" || status === "Non applicable") {
         setOpenedTaskId(null);
@@ -126,6 +143,13 @@ export default function TaskChecklist({
         <section className="card inline-error" role="alert">
           <strong>Action impossible</strong>
           <p>{error}</p>
+        </section>
+      )}
+
+      {success && (
+        <section className="card inline-success" role="status">
+          <strong>Enregistré</strong>
+          <p>{success}</p>
         </section>
       )}
 
@@ -188,7 +212,7 @@ export default function TaskChecklist({
                           [task.id]: event.target.value,
                         }))
                       }
-                      placeholder="Observation, anomalie ou précision…"
+                      placeholder="Obligatoire pour signaler un problème…"
                       rows={3}
                     />
                   </label>
@@ -228,9 +252,7 @@ export default function TaskChecklist({
                         }
                         onClick={() => updateTask(task, status)}
                       >
-                        {isBusy && task.status !== status
-                          ? "…"
-                          : status}
+                        {status}
                       </button>
                     ))}
                   </div>

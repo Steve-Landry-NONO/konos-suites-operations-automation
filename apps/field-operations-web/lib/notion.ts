@@ -41,17 +41,6 @@ export type FieldIntervention = {
   nights: number;
   bedroomBed: boolean;
   sofaBed: boolean;
-  bedroomSets: number;
-  sofaSets: number;
-  towels: number;
-  pillowcases: number;
-  bathMats: number;
-  kitchenTowels: number;
-  water: number;
-  coffeeCapsules: number;
-  wcRolls: number;
-  kitchenBags: number;
-  wcBags: number;
   checklistVersion: string;
   tasks: FieldTask[];
 };
@@ -85,6 +74,7 @@ function getProperties(page: unknown): Record<string, any> {
   ) {
     throw new Error("Réponse Notion inattendue : propriétés absentes.");
   }
+
   return (page as any).properties;
 }
 
@@ -195,19 +185,6 @@ export async function loadFieldIntervention(
     nights: numberValue(interventionProperties["Nb nuits"]),
     bedroomBed: checkboxValue(interventionProperties["Lit chambre à préparer"]),
     sofaBed: checkboxValue(interventionProperties["Canapé-lit à préparer"]),
-    bedroomSets: numberValue(interventionProperties["Jeux chambre à prendre"]),
-    sofaSets: numberValue(interventionProperties["Jeux canapé à prendre"]),
-    towels: numberValue(interventionProperties["Serviettes à prendre"]),
-    pillowcases: numberValue(interventionProperties["Taies à prendre"]),
-    bathMats: numberValue(interventionProperties["Tapis bain à prendre"]),
-    kitchenTowels: numberValue(interventionProperties["Torchons à prendre"]),
-    water: numberValue(interventionProperties["Bouteilles eau à installer"]),
-    coffeeCapsules: numberValue(
-      interventionProperties["Capsules T-disc à installer"],
-    ),
-    wcRolls: numberValue(interventionProperties["Rouleaux WC à installer"]),
-    kitchenBags: numberValue(interventionProperties["Sacs cuisine à prévoir"]),
-    wcBags: numberValue(interventionProperties["Sacs WC à prévoir"]),
     checklistVersion:
       textValue(interventionProperties["Version checklist"]) || taskVersion,
     tasks,
@@ -222,6 +199,7 @@ async function assertMissionCanBeCompleted(taskPage: any): Promise<void> {
 
   const properties = getProperties(taskPage);
   const interventionIds = relationIds(properties["Intervention"]);
+
   if (interventionIds.length === 0) {
     throw new Error("La tâche de clôture n’est reliée à aucune intervention.");
   }
@@ -253,16 +231,66 @@ async function assertMissionCanBeCompleted(taskPage: any): Promise<void> {
   }
 }
 
+async function updateLinkedInterventionIncident(
+  taskPage: any,
+  comment: string,
+  completedBy: string,
+): Promise<void> {
+  const notion = getNotionClient();
+  const properties = getProperties(taskPage);
+  const interventionIds = relationIds(properties["Intervention"]);
+
+  if (interventionIds.length === 0) {
+    throw new Error(
+      "Impossible de signaler l’incident : aucune intervention liée.",
+    );
+  }
+
+  const taskTitle = titleValue(properties["Tâche"]) || "Tâche terrain";
+  const author = completedBy.trim() || "Intervenant non renseigné";
+  const incidentDescription = `${taskTitle} — ${comment.trim()} — Signalé par ${author}`;
+
+  await notion.pages.update({
+    page_id: interventionIds[0],
+    properties: {
+      "Incident constaté": { checkbox: true },
+      "Description incident": {
+        rich_text: richText(incidentDescription),
+      },
+      "Action corrective": {
+        rich_text: richText("À définir par le gestionnaire."),
+      },
+      "Steve prévenu": { checkbox: false },
+    },
+  });
+}
+
 export async function updateFieldTask(
   taskId: string,
   input: UpdateTaskInput,
 ): Promise<FieldTask> {
   const notion = getNotionClient();
+  const comment = (input.comment ?? "").trim();
+  const completedBy = (input.completedBy ?? "").trim();
+
+  if (input.status === "Problème" && comment.length < 5) {
+    throw new Error(
+      "Un commentaire d’au moins 5 caractères est obligatoire pour signaler un problème.",
+    );
+  }
 
   const currentPage = await notion.pages.retrieve({ page_id: taskId });
 
   if (input.status === "Fait") {
     await assertMissionCanBeCompleted(currentPage);
+  }
+
+  if (input.status === "Problème") {
+    await updateLinkedInterventionIncident(
+      currentPage,
+      comment,
+      completedBy,
+    );
   }
 
   const isCompleted = input.status === "Fait";
@@ -275,10 +303,10 @@ export async function updateFieldTask(
         select: { name: input.status },
       },
       Commentaire: {
-        rich_text: richText((input.comment ?? "").trim()),
+        rich_text: richText(comment),
       },
       "Réalisé par": {
-        rich_text: richText((input.completedBy ?? "").trim()),
+        rich_text: richText(completedBy),
       },
       "Réalisé le": isCompleted
         ? { date: { start: now } }
